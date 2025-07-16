@@ -1,0 +1,2 @@
+CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, username TEXT UNIQUE, password_hash TEXT);
+CREATE TABLE IF NOT EXISTS accounts (id SERIAL PRIMARY KEY, user_id INT REFERENCES users(id), balance DECIMAL);
