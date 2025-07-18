@@ -1,14 +1,13 @@
 import { JSX } from "react";
-import { useDispatch, useSelector } from "react-redux";
+import { useSelector } from "react-redux";
 
-import { Auth, setLogin } from './authSlice'
-import { Store } from "../../store";
 import { Navigate, useLocation } from "react-router";
+import { authSelector } from "./authSlice";
 
-export function RequireAuth({ children }: { children: JSX.Element }) {
-  const authStatus = useSelector<Store, Auth>((state) => state.auth)
+function RequireAuth({ requiredRoles = null, children }: { requiredRoles?: [string] | null, children: JSX.Element }) {
+  const authStatus = useSelector(authSelector)
 
-  if (!authStatus.user) {
+  if (!authStatus.username) {
     // Redirect them to the /login page, but save the current location they were
     // trying to go to when they were redirected. This allows us to send them
     // along to that page after they login, which is a nicer user experience
@@ -17,5 +16,14 @@ export function RequireAuth({ children }: { children: JSX.Element }) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  if (requiredRoles !== null) {
+    const hasRoles = requiredRoles.filter(role => authStatus.roles?.includes(role))
+    if (!hasRoles.length) {
+      return <p>Unauthorised</p>
+    }
+  }
+
   return children;
 }
+
+export { RequireAuth }

@@ -8,7 +8,6 @@ RUN go mod download
 COPY . .
 
 # RUN CGO_ENABLED=0 go install -ldflags "-s -w -extldflags '-static'" github.com/go-delve/delve/cmd/dlv@latest
-
 # RUN CGO_ENABLED=0 go build -gcflags "all=-N -l" -o go-debugger .
 
 RUN go build -o auth-service

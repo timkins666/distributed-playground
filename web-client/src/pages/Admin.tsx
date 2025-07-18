@@ -1,9 +1,8 @@
-// import React, { useState } from 'react';
 import { useSelector } from 'react-redux'
-import { useNavigate } from 'react-router';
+import { authSelector } from '../features/auth/authSlice';
 
 export default function Admin() {
-    const authStatus = useSelector((state) => state.auth)
+    const authStatus = useSelector(authSelector)
 
     const pingAdmin = async () => {
         const res = await fetch('http://localhost:8081/admin', {
@@ -19,7 +18,6 @@ export default function Admin() {
 
     return (
         <div>
-            <h1>Banking Local</h1>
             <h2>Admin</h2>
 
             <p>token: {authStatus.token}</p>
