@@ -2,16 +2,17 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"time"
 
-	_ "github.com/lib/pq"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 var (
-	userTokens map[string]UserToken = make(map[string]UserToken, 0)
+	secretKey = []byte("super-secret")
 )
 
 func corsMiddleware(next http.Handler) http.Handler {
@@ -21,7 +22,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:"+frontend_port)
 		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
@@ -31,29 +32,44 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func newToken(user string) UserToken {
-	return UserToken{
-		Username:  user,
-		Value:     user + "-token",
-		CreatedAt: time.Now(),
+func createToken(username string) (string, error) {
+	var role string
+	if username == "admin" {
+		role = "admin"
+	} else {
+		role = "customer"
 	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256,
+		jwt.MapClaims{
+			"username": username,
+			"role":     role,
+			"exp":      time.Now().Add(time.Hour * 24).Unix(),
+		})
+
+	tokenString, err := token.SignedString(secretKey)
+	if err != nil {
+		return "", err
+	}
+
+	return tokenString, nil
 }
 
-// func checkToken(user string, rqToken string) bool {
-// 	userToken, ok := userTokens[user]
-// 	if !ok {
-// 		log.Printf("User %s has no token!", user)
-// 		return false
-// 	}
+func verifyToken(tokenString string) (*jwt.Token, error) {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		return secretKey, nil
+	})
 
-// 	if userToken.Value != rqToken {
-// 		log.Printf("User %s wrong token! (Submitted %s, expected %s)", user, rqToken, userToken.Value)
-// 		return false
-// 	}
+	if err != nil {
+		return nil, err
+	}
 
-// 	log.Printf("User %s token ok :)", user)
-// 	return true
-// }
+	if !token.Valid {
+		return nil, fmt.Errorf("invalid token")
+	}
+
+	return token, nil
+}
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
@@ -62,16 +78,62 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: db not local map
-	token := newToken(req.Username)
-	userTokens[req.Username] = token
+	token, err := createToken(req.Username)
+	if err != nil {
+		log.Println("Error creating token: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 
-	json.NewEncoder(w).Encode(map[string]string{"token": token.Value})
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"token": token})
+}
+
+func adminHandler(w http.ResponseWriter, r *http.Request) {
+	tokenStr := r.Header.Get("Authorization")
+
+	if tokenStr == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Println(w, "Missing auth header")
+		return
+	}
+
+	tokenStr = tokenStr[len("Bearer "):]
+
+	token, err := verifyToken(tokenStr)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Println(w, "Nope")
+		return
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if ok {
+		log.Println("token claims: ", claims)
+		log.Println("claims role: ", claims["role"])
+	}
+
+	role, ok := claims["role"]
+	if !ok {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Println(w, "Nope")
+		return
+	}
+
+	if role != "admin" {
+		log.Printf("Not allowed with role %s", role)
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Println(w, "Not admin")
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
 func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/login", loginHandler)
+	mux.HandleFunc("/admin", adminHandler)
 
 	log.Println("Auth service running on :8081")
 	log.Fatal(http.ListenAndServe(":8081", corsMiddleware(mux)))

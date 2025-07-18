@@ -62,12 +62,12 @@ services:
   frontend:
     container_name: frontend
     build:
-      context: ./web-client       # ← Important: set build context
+      context: ./web-client
     ports:
-      - "5173:5173"               # Vite dev server port
+      - "5173:5173"               
     volumes:
-      - ./web-client:/app         # Live reload app files
-      - /app/node_modules         # Prevent host node_modules override
+      - ./web-client:/app        
+      - /app/node_modules      
     working_dir: /app
     environment:
       <<: *common-vars
