@@ -43,24 +43,18 @@
   #   volumes:
   #     - ./db/postgres-init:/schema
 
+
+x-go-version: &go-version
+  1.24.5 
+
 x-common-variables: &common-vars
   APP_PORT: 8080
   AUTH_PORT: 8081
+  ACCOUNTS_PORT: 8082
   FRONTEND_PORT: 5173
   KAFKA_BROKER: kafka:9092
 
 services:
-  auth-service:
-    build: 
-      context: ./backend
-      dockerfile: ./svc/auth-service/Dockerfile
-    container_name: auth-service
-    environment:
-      <<: *common-vars
-      POSTGRES_HOST: postgres
-    ports:
-      - "4000:4000"
-      - "8081:8081"
 
   frontend:
     container_name: frontend
@@ -78,10 +72,33 @@ services:
       CHOKIDAR_USEPOLLING: true
     command: npm run dev -- --host
 
-  # account-service:
-  #   build: ./services/account-service
-  #   environment:
-  #     - POSTGRES_HOST=postgres
+  auth-service:
+    container_name: auth-service
+    build: 
+      context: ./backend
+      dockerfile: ./svc/auth-service/Dockerfile
+      args:
+        GO_VERSION: *go-version
+    environment:
+      <<: *common-vars
+      POSTGRES_HOST: postgres
+    ports:
+      - "4000:4000"
+      - "8081:8081"
+
+  account-service:
+    container_name: account-service
+    build: 
+      context: ./backend
+      dockerfile: ./svc/account-service/Dockerfile
+      args:
+        GO_VERSION: *go-version
+    environment:
+      <<: *common-vars
+      POSTGRES_HOST: postgres
+    ports:
+      # - "4000:4000"
+      - "8082:8082"
 
   # payment-service:
   #   build: ./services/payment-service

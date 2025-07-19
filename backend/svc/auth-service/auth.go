@@ -9,27 +9,10 @@ import (
 	"slices"
 	"strings"
 
-	cm "github.com/timkins666/distributed-playground/backend/pkg/common"
+	cmn "github.com/timkins666/distributed-playground/backend/pkg/common"
 )
 
-func corsMiddleware(next http.Handler) http.Handler {
-	frontend_port := os.Getenv("FRONTEND_PORT")
-	log.Println("frontend port", frontend_port)
-
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:"+frontend_port)
-		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-func getUser(username string) cm.User {
+func getLoginUser(username string) cmn.User {
 	// fakes getting existing user info.
 	// any username beginning with s or S will be a customer and an admin.
 	// admin user will be admin only.
@@ -46,14 +29,14 @@ func getUser(username string) cm.User {
 		roles = append(roles, "admin")
 	}
 
-	return cm.User{
+	return cmn.User{
 		Username: username,
 		Roles:    roles,
 	}
 }
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
-	var req cm.LoginRequest
+	var req cmn.LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
@@ -65,8 +48,8 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user := getUser(req.Username)
-	token, err := cm.CreateUserToken(user)
+	user := getLoginUser(req.Username)
+	token, err := cmn.CreateUserToken(user)
 	if err != nil {
 		log.Println("Error creating token: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -78,7 +61,8 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func adminHandler(w http.ResponseWriter, r *http.Request) {
-	user, err := cm.GetUserFromClaims(r)
+	// for testing tokens
+	user, err := cmn.GetUserFromClaims(r)
 	if err != nil || !user.Valid() {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Println(w, "Nope")
@@ -100,6 +84,7 @@ func main() {
 	mux.HandleFunc("/login", loginHandler)
 	mux.HandleFunc("/admin", adminHandler)
 
-	log.Println("Auth service running on :8081")
-	log.Fatal(http.ListenAndServe(":8081", corsMiddleware(mux)))
+	port := ":" + os.Getenv("AUTH_PORT")
+	log.Printf("Auth service running on %s", port)
+	log.Fatal(http.ListenAndServe(port, cmn.CorsMiddleware(mux)))
 }
