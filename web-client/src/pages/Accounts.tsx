@@ -78,6 +78,26 @@ export default function Accounts() {
     dispatch(addAccount(data));
   };
 
+  const sendMoney = async (fromAcct: number) => {
+    const tgtAcct = 666;
+
+    const res = await fetch(gatewayUrl("payment", "pay"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${authStatus.token}`,
+      },
+      body: JSON.stringify({
+        sourceAccountId: fromAcct,
+        targetAccountId: tgtAcct,
+        appId: Date.now().toString(),
+        amount: 20000.59,
+      }),
+    });
+    const success = res.status === 202;
+    console.log("success: ", success)
+  };
+
   return (
     <div>
       <h2>Accounts</h2>
@@ -91,7 +111,8 @@ export default function Accounts() {
       ) : (
         userAccountState.accounts.map((acc) => (
           <p key={acc.accountId}>
-            {acc.bankName}: {acc.balance}
+            {acc.bankName}: {acc.balance}{" "}
+            <Button onClick={() => sendMoney(acc.accountId)}>pay</Button>
           </p>
         ))
       )}

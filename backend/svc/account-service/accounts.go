@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/segmentio/kafka-go"
 	cmn "github.com/timkins666/distributed-playground/backend/pkg/common"
 )
 
@@ -85,11 +87,53 @@ func createUserAccountHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(newAccount)
 }
 
+func paymentValidator() {
+	kafkaBroker := os.Getenv("KAFKA_BROKER")
+	if kafkaBroker == "" {
+		log.Fatalf("KAFKA_BROKER not found")
+	} else {
+		log.Println("broker env", kafkaBroker)
+	}
+
+	reader := kafka.NewReader(kafka.ReaderConfig{
+		Brokers: []string{kafkaBroker},
+		Topic:   "payment-requested",
+		GroupID: "payment-validator",
+	})
+
+	max_errors := 10
+	for {
+		msg, err := reader.ReadMessage(context.Background())
+		if err != nil {
+			log.Println("READ MSG ERROR", err)
+			max_errors -= 1
+			if max_errors == 0 {
+				break
+			}
+			continue
+		}
+
+		var req cmn.PaymentRequest
+		err = json.Unmarshal(msg.Value, &req)
+		if err != nil {
+			log.Println("ERROR: failed to parse message")
+			log.Println(err)
+			// TODO: dead letter/retry queue
+			continue
+		}
+
+		log.Println("Read message: ", req)
+	}
+
+}
+
 func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/banks", getAllBanksHandler)
 	mux.HandleFunc("/myaccounts", getUserAccountsHandler)
 	mux.HandleFunc("/new", createUserAccountHandler)
+
+	go paymentValidator()
 
 	port := ":" + os.Getenv("SERVE_PORT")
 	log.Printf("Accounts service running on %s", port)

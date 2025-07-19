@@ -19,7 +19,11 @@ var (
 
 func main() {
 	kafkaBroker := os.Getenv("KAFKA_BROKER")
-	log.Println("broker env", kafkaBroker)
+	if kafkaBroker == "" {
+		log.Fatalf("KAFKA_BROKER not found")
+	} else {
+		log.Println("broker env", kafkaBroker)
+	}
 
 	// reader := kafka.NewReader(kafka.ReaderConfig{
 	// 	Brokers: []string{kafkaBroker},
@@ -62,4 +66,6 @@ func handlePaymentRequest(w http.ResponseWriter, r *http.Request) {
 	} else {
 		log.Printf("Sent payment-requested message: %s", msg)
 	}
+
+	w.WriteHeader(http.StatusAccepted)
 }

@@ -27,6 +27,7 @@ var kafkaWriter *kafka.Writer
 var proxyHosts map[string]string = map[string]string{
 	"auth":    os.Getenv("AUTH_SERVICE_HOST"),
 	"account": os.Getenv("ACCOUNT_SERVICE_HOST"),
+	"payment": os.Getenv("PAYMENT_SERVICE_HOST"),
 }
 
 func main() {
