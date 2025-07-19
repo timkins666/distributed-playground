@@ -36,9 +36,8 @@ func main() {
 	}
 
 	kafkaWriter = &kafka.Writer{
-		Addr:     kafka.TCP(kafkaBroker),
-		Topic:    "payment-requests",
-		Balancer: &kafka.LeastBytes{},
+		Addr:  kafka.TCP(kafkaBroker),
+		Topic: "payment-requested",
 	}
 	defer kafkaWriter.Close()
 

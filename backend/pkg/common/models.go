@@ -1,6 +1,8 @@
 package common
 
 import (
+	"time"
+
 	_ "github.com/lib/pq"
 )
 
@@ -16,4 +18,24 @@ type User struct {
 
 func (u *User) Valid() bool {
 	return len(u.Username) > 0 && len(u.Roles) > 0
+}
+
+type PaymentRequest struct {
+	AppId           string    `json:"appId"`
+	SystemId        string    `json:"systemId,omitEmpty"`
+	Amount          float32   `json:"amount"`
+	SourceAccountId int       `json:"sourceAccountId"`
+	TargetAccountId int       `json:"targetAccountId"`
+	Timestamp       time.Time `json:"timestamp"`
+}
+
+func (pr *PaymentRequest) Valid() bool {
+	// checks all fields populated and imposes arbitrary timeout
+	return pr.AppId != "" &&
+		pr.SystemId != "" &&
+		pr.Amount > 0 &&
+		pr.SourceAccountId > 0 &&
+		pr.TargetAccountId > 0 &&
+		time.Now().UTC().After(pr.Timestamp) &&
+		pr.Timestamp.After(time.Now().Add(-10*time.Second))
 }

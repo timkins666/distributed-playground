@@ -74,6 +74,16 @@ services:
     environment:
       SERVE_PORT: $ACCOUNT_PORT
 
+  payment-service:
+    container_name: payment-service
+    build:
+      context: ./backend
+      dockerfile: ./svc/payment-service/Dockerfile
+      args:
+        GO_VERSION: $GO_VERSION
+    environment:
+      SERVE_PORT: $PAYMENT_PORT
+
   kafka:
     image: bitnami/kafka:latest
     container_name: kafka
