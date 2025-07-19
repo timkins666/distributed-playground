@@ -27,7 +27,7 @@ type Bank struct {
 
 var (
 	openAccounts []Account = []Account{}
-	banks        []Bank    = []Bank{{Name: "Bonzo", Id: 1}, {Name: "Nationwood", Id: 2}}
+	banks        []Bank    = []Bank{{Name: "Bonzo", Id: 1}}
 )
 
 func getAllBanksHandler(w http.ResponseWriter, r *http.Request) {
@@ -88,10 +88,10 @@ func createUserAccountHandler(w http.ResponseWriter, r *http.Request) {
 func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/banks", getAllBanksHandler)
-	mux.HandleFunc("/accounts", getUserAccountsHandler)
-	mux.HandleFunc("/account/new", createUserAccountHandler)
+	mux.HandleFunc("/myaccounts", getUserAccountsHandler)
+	mux.HandleFunc("/new", createUserAccountHandler)
 
-	port := ":" + os.Getenv("ACCOUNTS_PORT")
+	port := ":" + os.Getenv("SERVE_PORT")
 	log.Printf("Accounts service running on %s", port)
-	log.Fatal(http.ListenAndServe(port, cmn.CorsMiddleware(mux)))
+	log.Fatal(http.ListenAndServe(port, mux))
 }

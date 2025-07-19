@@ -1,122 +1,167 @@
-  # kafka:
-  #   image: bitnami/kafka:latest
-  #   environment:
-  #     - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092
-  #     - KAFKA_CFG_PROCESS_ROLES=broker,controller
-  #     - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
-  #   ports: ["9092:9092"]
-  #   healthcheck:
-  #     test: ["CMD", "kafka-topics.sh", "--bootstrap-server", "localhost:9092", "--list"]
-  #     interval: 5s
-  #     retries: 6
-
-  # cassandra:
-  #   image: cassandra:4.1
-  #   ports: ["9042:9042"]
-  #   healthcheck:
-  #     test: ["CMD", "cqlsh", "-e", "DESCRIBE KEYSPACES"]
-  #     interval: 5s
-  #     retries: 6
-
-  # cassandra-init:
-  #   image: cassandra:4.1
-  #   depends_on:
-  #     cassandra:
-  #       condition: service_healthy
-  #   entrypoint: ["sh","-c","cqlsh cassandra -f /schema/init.cql"]
-  #   volumes:
-  #     - ./db/cassandra-init:/schema
-
-  # postgres:
-  #   image: postgres:15
-  #   environment:
-  #     POSTGRES_USER: me
-  #     POSTGRES_PASSWORD: me
-  #   ports: ["5432:5432"]
-
-  # postgres-init:
-  #   image: postgres:15
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #   entrypoint: ["sh","-c","psql -h postgres -U me -f /schema/init.sql"]
-  #   volumes:
-  #     - ./db/postgres-init:/schema
-
-
-x-go-version: &go-version
-  1.24.5 
-
-x-common-variables: &common-vars
-  APP_PORT: 8080
-  AUTH_PORT: 8081
-  ACCOUNTS_PORT: 8082
-  FRONTEND_PORT: 5173
-  KAFKA_BROKER: kafka:9092
-
 services:
-
   frontend:
     container_name: frontend
     build:
       context: ./web-client
     ports:
-      - "5173:5173"               
+      - "$FRONTEND_PORT:$FRONTEND_PORT"
     volumes:
-      - ./web-client:/app        
-      - /app/node_modules      
-    working_dir: /app
+      - ./web-client:/app
+      - /app/node_modules
     environment:
-      <<: *common-vars
       NODE_ENV: development
       CHOKIDAR_USEPOLLING: true
     command: npm run dev -- --host
 
+  # nginx:
+  #   image: nginx:stable-alpine
+  #   ports:
+  #     - "80:80"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  #   depends_on:
+  #     - api-gateway1
+  #     - api-gateway2
+
+  # api-gateway1:
+  #   build: ./api-gateway
+  #   environment:
+  #     - KAFKA_BROKER=kafka:9092
+
+  # api-gateway2:
+  #   build: ./api-gateway
+  #   environment:
+  #     - KAFKA_BROKER=kafka:9092
+
+  api-gateway:
+    container_name: gateway
+    build:
+      context: ./backend
+      dockerfile: ./svc/api-gateway/Dockerfile
+      args:
+        GO_VERSION: $GO_VERSION
+    environment:
+      SERVE_PORT: $GATEWAY_PORT
+      AUTH_SERVICE_HOST: http://auth-service:$AUTH_PORT
+      ACCOUNT_SERVICE_HOST: http://account-service:$ACCOUNT_PORT
+      FRONTEND_HOST: localhost:$FRONTEND_PORT
+      KAFKA_BROKER: $KAFKA_BROKER
+    ports:
+      # - "4000:4000"
+      - 8080:$GATEWAY_PORT
+
   auth-service:
     container_name: auth-service
-    build: 
+    build:
       context: ./backend
       dockerfile: ./svc/auth-service/Dockerfile
       args:
-        GO_VERSION: *go-version
+        GO_VERSION: $GO_VERSION
     environment:
-      <<: *common-vars
-      POSTGRES_HOST: postgres
-    ports:
-      - "4000:4000"
-      - "8081:8081"
+      SERVE_PORT: $AUTH_PORT
+      FRONTEND_HOST: localhost:$DEFAULT_PORT
+  # ports:
+  #   - "4000:4000"
+  #   - "8081:8081"
 
   account-service:
     container_name: account-service
-    build: 
+    build:
       context: ./backend
       dockerfile: ./svc/account-service/Dockerfile
       args:
-        GO_VERSION: *go-version
+        GO_VERSION: $GO_VERSION
     environment:
-      <<: *common-vars
-      POSTGRES_HOST: postgres
+      SERVE_PORT: $ACCOUNT_PORT
+
+  kafka:
+    image: bitnami/kafka:latest
+    container_name: kafka
     ports:
-      # - "4000:4000"
-      - "8082:8082"
+      - "29092:$KAFKA_PORT"
+    environment:
+      KAFKA_BROKER: $KAFKA_BROKER
+      KAFKA_CFG_NODE_ID: 0
+      KAFKA_CFG_PROCESS_ROLES: broker,controller
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 0@kafka:9093
+      KAFKA_CFG_LISTENERS: PLAINTEXT://kafka:9092,CONTROLLER://kafka:9093
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_KRAFT_CLUSTER_ID: kraft-cluster-1
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CFG_LOG_DIRS: /tmp/kraft-combined-logs
+    volumes:
+      - ./volumes/kafka_data:/bitnami/kafka
+    healthcheck:
+      test: ["CMD", "kafka-topics.sh", "--bootstrap-server", "kafka:9092", "--list"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
 
-  # payment-service:
-  #   build: ./services/payment-service
-  #   environment:
-  #     - KAFKA_BROKER=kafka:9092
-  #     - CASSANDRA_HOST=cassandra
-  #   depends_on:
-  #     cassandra-init:
-  #       condition: service_completed_successfully
-  #     kafka:
-  #       condition: service_healthy
+  kafka-init:
+    image: bitnami/kafka:latest
+    container_name: kafka-init
+    depends_on:
+      - kafka
+    entrypoint: ["/bin/sh", "-c"]
+    environment:
+      KAFKA_BROKER: $KAFKA_BROKER
+    volumes:
+      - ./scripts/kafka-init:/init
+    command: [ "/init/init.sh"]
+    
 
-  # api-gateway:
-  #   build: ./services/api-gateway
-  #   ports: ["8080:8080"]
-  #   depends_on:
-  #     - auth-service
-  #     - account-service
-  #     - payment-service
+    # payment-service:
+    #   build: ./services/payment-service
+    #   environment:
+    #     - KAFKA_BROKER=kafka:9092
+    #     - CASSANDRA_HOST=cassandra
+    #   depends_on:
+    #     cassandra-init:
+    #       condition: service_completed_successfully
+    #     kafka:
+    #       condition: service_healthy
 
- 
+    # api-gateway:
+    #   build: ./services/api-gateway
+    #   ports: ["8080:8080"]
+    #   depends_on:
+    #     - auth-service
+    #     - account-service
+    #     - payment-service
+
+
+
+# cassandra:
+#   image: cassandra:4.1
+#   ports: ["9042:9042"]
+#   healthcheck:
+#     test: ["CMD", "cqlsh", "-e", "DESCRIBE KEYSPACES"]
+#     interval: 5s
+#     retries: 6
+
+# cassandra-init:
+#   image: cassandra:4.1
+#   depends_on:
+#     cassandra:
+#       condition: service_healthy
+#   entrypoint: ["sh","-c","cqlsh cassandra -f /schema/init.cql"]
+#   volumes:
+#     - ./db/cassandra-init:/schema
+
+# postgres:
+#   image: postgres:15
+#   environment:
+#     POSTGRES_USER: me
+#     POSTGRES_PASSWORD: me
+#   ports: ["5432:5432"]
+
+# postgres-init:
+#   image: postgres:15
+#   depends_on:
+#     postgres:
+#       condition: service_healthy
+#   entrypoint: ["sh","-c","psql -h postgres -U me -f /schema/init.sql"]
+#   volumes:
+#     - ./db/postgres-init:/schema
+

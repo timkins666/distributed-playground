@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Navigate } from "react-router";
 import { authSelector, setLogin } from "../components/auth/authSlice";
+import { gatewayHost } from "../conf";
 
 export default function Login() {
   const [loginFailed, setLoginFailed] = useState(false);
@@ -16,7 +17,7 @@ export default function Login() {
   }
 
   const doLogin = async () => {
-    const res = await fetch("http://localhost:8081/login", {
+    const res = await fetch(`${gatewayHost}/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password: "test" }),

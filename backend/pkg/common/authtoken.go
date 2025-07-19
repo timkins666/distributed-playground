@@ -3,19 +3,15 @@ package common
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
 var secretKey = []byte("super-secret-shh")
-
-func getAuthHeaderToken(r *http.Request) *jwt.Token {
-	tokenStr := r.Header.Get("Authorization")[len("Bearer "):]
-	token, _ := VerifyToken(tokenStr)
-	return token
-}
 
 func CreateUserToken(user User) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256,
@@ -33,8 +29,15 @@ func CreateUserToken(user User) (string, error) {
 	return tokenString, nil
 }
 
-func VerifyToken(tokenString string) (*jwt.Token, error) {
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
+func VerifyToken(r *http.Request) (*jwt.Token, error) {
+	headerStr := r.Header.Get("Authorization")
+
+	if !strings.HasPrefix(headerStr, "Bearer ") {
+		return nil, errors.New("Invalid header")
+	}
+	headerStr = strings.TrimPrefix(headerStr, "Bearer ")
+
+	token, err := jwt.Parse(headerStr, func(token *jwt.Token) (any, error) {
 		return secretKey, nil
 	})
 
@@ -50,8 +53,10 @@ func VerifyToken(tokenString string) (*jwt.Token, error) {
 }
 
 func GetUserFromClaims(r *http.Request) (User, error) {
-	token := getAuthHeaderToken(r)
-	if token == nil {
+	token, err := VerifyToken(r)
+
+	if err != nil {
+		log.Println("ERROR:", err)
 		return User{}, errors.New("Nope")
 	}
 
@@ -60,6 +65,7 @@ func GetUserFromClaims(r *http.Request) (User, error) {
 		return User{}, errors.New("Nope")
 	}
 
+	// TODO: use json or something rather than first principals
 	var username string
 	claimUser, ok := claims["username"]
 	if ok {

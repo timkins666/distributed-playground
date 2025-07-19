@@ -1,11 +1,12 @@
 import { useSelector } from "react-redux";
 import { authSelector } from "../components/auth/authSlice";
+import { gatewayUrl } from "../conf";
 
 export default function Admin() {
   const authStatus = useSelector(authSelector);
 
   const pingAdmin = async () => {
-    const res = await fetch("http://localhost:8081/admin", {
+    const res = await fetch(gatewayUrl("auth", "admin"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

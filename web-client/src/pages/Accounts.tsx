@@ -14,6 +14,7 @@ import {
   setBanks,
   setTriedLoad as triedLoadBanks,
 } from "../components/banks/banksSlice";
+import { gatewayUrl } from "../conf";
 
 export default function Accounts() {
   const dispatch = useDispatch();
@@ -31,7 +32,7 @@ export default function Accounts() {
       if (bankState.triedLoad) {
         return;
       }
-      const res = await fetch("http://localhost:8082/banks", {
+      const res = await fetch(gatewayUrl("account", "banks"), {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -42,7 +43,7 @@ export default function Accounts() {
       dispatch(setBanks(data));
     };
     getBanks();
-  }, [authStatus, bankState]);
+  }, []);
 
   useEffect(() => {
     if (userAccountState.triedLoad) {
@@ -51,7 +52,7 @@ export default function Accounts() {
 
     dispatch(triedLoadAccounts());
     const getAccounts = async () => {
-      const res = await fetch("http://localhost:8082/accounts", {
+      const res = await fetch(gatewayUrl("account", "myaccounts"), {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -62,10 +63,10 @@ export default function Accounts() {
       dispatch(setAccounts(data));
     };
     getAccounts();
-  }, [authStatus, userAccountState]);
+  }, []);
 
   const createAccount = async () => {
-    const res = await fetch("http://localhost:8082/account/new", {
+    const res = await fetch(gatewayUrl("account", "new"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

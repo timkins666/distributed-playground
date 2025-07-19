@@ -84,7 +84,7 @@ func main() {
 	mux.HandleFunc("/login", loginHandler)
 	mux.HandleFunc("/admin", adminHandler)
 
-	port := ":" + os.Getenv("AUTH_PORT")
+	port := ":" + os.Getenv("SERVE_PORT")
 	log.Printf("Auth service running on %s", port)
-	log.Fatal(http.ListenAndServe(port, cmn.CorsMiddleware(mux)))
+	log.Fatal(http.ListenAndServe(port, mux))
 }
