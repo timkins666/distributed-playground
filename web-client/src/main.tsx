@@ -12,19 +12,23 @@ import RootLayout from './layouts/RootLayout'
 import Index from './pages/Index'
 import Accounts from './pages/Accounts'
 
-createRoot(document.getElementById('root')).render(
+import CssBaseline from '@mui/material/CssBaseline';
+
+createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <Provider store={store}>
-      <BrowserRouter>
-        <Routes>
-          <Route path='/' element={<RootLayout />}>
-            <Route index path='/' element={<Index />} />
-            <Route path='/login' element={<Login />} />
-            <Route path='/accounts' element={<RequireAuth><Accounts /></RequireAuth>} />
-            <Route path='/admin' element={<RequireAuth requiredRoles={["admin"]}><Admin /></RequireAuth>} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
+      <CssBaseline>
+        <BrowserRouter>
+          <Routes>
+            <Route path='/' element={<RootLayout />}>
+              <Route index path='/' element={<Index />} />
+              <Route path='/login' element={<Login />} />
+              <Route path='/accounts' element={<RequireAuth><Accounts /></RequireAuth>} />
+              <Route path='/admin' element={<RequireAuth requiredRoles={["admin"]}><Admin /></RequireAuth>} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </CssBaseline>
     </Provider>
   </StrictMode>
 )

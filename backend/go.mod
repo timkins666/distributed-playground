@@ -1,4 +1,4 @@
-module github.com/timkins666/distributed-playground/services/auth-service
+module github.com/timkins666/distributed-playground/backend
 
 go 1.23.5
 

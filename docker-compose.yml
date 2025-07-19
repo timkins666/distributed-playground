@@ -51,7 +51,10 @@ x-common-variables: &common-vars
 
 services:
   auth-service:
-    build: ./services/auth-service
+    build: 
+      context: ./backend
+      dockerfile: ./svc/auth-service/Dockerfile
+    container_name: auth-service
     environment:
       <<: *common-vars
       POSTGRES_HOST: postgres

@@ -1,4 +1,4 @@
-package main
+package common
 
 import (
 	_ "github.com/lib/pq"
@@ -14,6 +14,6 @@ type User struct {
 	Roles    []string `json:"roles"`
 }
 
-func (u *User) valid() bool {
+func (u *User) Valid() bool {
 	return len(u.Username) > 0 && len(u.Roles) > 0
 }

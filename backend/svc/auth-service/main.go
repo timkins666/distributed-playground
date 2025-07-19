@@ -8,13 +8,8 @@ import (
 	"os"
 	"slices"
 	"strings"
-	"time"
 
-	"github.com/golang-jwt/jwt/v5"
-)
-
-var (
-	secretKey = []byte("super-secret")
+	cm "github.com/timkins666/distributed-playground/backend/pkg/common"
 )
 
 func corsMiddleware(next http.Handler) http.Handler {
@@ -34,65 +29,44 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func getUser(username string) User {
-	roles := make([]string, 0)
+func getUser(username string) cm.User {
+	// fakes getting existing user info.
+	// any username beginning with s or S will be a customer and an admin.
+	// admin user will be admin only.
+	// any other user will be customer only.
+
+	roles := []string{}
 	if username == "admin" {
 		roles = append(roles, "admin")
 	} else {
 		roles = append(roles, "customer")
 	}
 
-	if strings.HasPrefix(username, "s") {
+	if strings.ToLower(username)[0:1] == "s" {
 		roles = append(roles, "admin")
 	}
 
-	return User{
+	return cm.User{
 		Username: username,
 		Roles:    roles,
 	}
 }
 
-func createUserToken(user User) (string, error) {
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256,
-		jwt.MapClaims{
-			"username": user.Username,
-			"roles":    user.Roles,
-			"exp":      time.Now().Add(time.Hour * 24).Unix(),
-		})
-
-	tokenString, err := token.SignedString(secretKey)
-	if err != nil {
-		return "", err
-	}
-
-	return tokenString, nil
-}
-
-func verifyToken(tokenString string) (*jwt.Token, error) {
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
-		return secretKey, nil
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	if !token.Valid {
-		return nil, fmt.Errorf("invalid token")
-	}
-
-	return token, nil
-}
-
 func loginHandler(w http.ResponseWriter, r *http.Request) {
-	var req LoginRequest
+	var req cm.LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
 
+	if strings.ToLower(req.Username[0:1]) == "x" {
+		log.Println("x users not allowed")
+		http.Error(w, "no x users", http.StatusUnauthorized)
+		return
+	}
+
 	user := getUser(req.Username)
-	token, err := createUserToken(user)
+	token, err := cm.CreateUserToken(user)
 	if err != nil {
 		log.Println("Error creating token: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -103,53 +77,9 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]any{"username": user.Username, "roles": user.Roles, "token": token})
 }
 
-func getAuthHeaderToken(r *http.Request) *jwt.Token {
-	tokenStr := r.Header.Get("Authorization")[len("Bearer "):]
-	token, _ := verifyToken(tokenStr)
-	return token
-}
-
 func adminHandler(w http.ResponseWriter, r *http.Request) {
-	token := getAuthHeaderToken(r)
-	if token == nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Println(w, "Nope")
-		return
-	}
-
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Println(w, "Nope")
-		return
-	}
-
-	var username string
-	claimUser, ok := claims["username"]
-	if ok {
-		username = claimUser.(string)
-	}
-
-	var roles []string
-	claimRoles, ok := claims["roles"]
-	if ok {
-		claimRoles, ok := claimRoles.([]any)
-		if ok {
-			for _, r := range claimRoles {
-				r, ok := r.(string)
-				if ok {
-					roles = append(roles, r)
-				}
-			}
-		}
-	}
-
-	user := User{
-		Username: username,
-		Roles:    roles,
-	}
-
-	if !user.valid() {
+	user, err := cm.GetUserFromClaims(r)
+	if err != nil || !user.Valid() {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Println(w, "Nope")
 		return

@@ -2,6 +2,7 @@ import { useSelector } from "react-redux"
 import { authSelector } from "./auth/authSlice"
 import { Link } from "react-router"
 
+import { ButtonGroup, Button } from '@mui/material';
 
 export const navBar = () => {
     const auth = useSelector(authSelector)
@@ -11,12 +12,11 @@ export const navBar = () => {
     }
 
     return (
-        <div style={{ width: '100%' }}>
-            <Link to="/accounts">accounts</Link>
-            
-            {auth.roles?.includes("admin") ? <Link to="/admin">admin</Link> : ""}
-            
-        </div>
+        <ButtonGroup variant="contained" aria-label="Basic button group">
+            <Button variant="outlined"><Link to="/accounts">accounts</Link></Button>
+            {auth.roles?.includes("admin") ?<Button variant="outlined"><Link to="/admin">admin</Link></Button>: null}
+        </ButtonGroup>
+
     )
 }
 
