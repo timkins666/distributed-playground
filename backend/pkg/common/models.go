@@ -22,8 +22,8 @@ func (u *User) Valid() bool {
 
 type PaymentRequest struct {
 	AppId           string    `json:"appId"`
-	SystemId        string    `json:"systemId,omitEmpty"`
-	Amount          float32   `json:"amount"`
+	SystemId        string    `json:"systemId,omitempty"`
+	Amount          int64     `json:"amount"`
 	SourceAccountId int       `json:"sourceAccountId"`
 	TargetAccountId int       `json:"targetAccountId"`
 	Timestamp       time.Time `json:"timestamp"`

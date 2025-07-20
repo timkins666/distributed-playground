@@ -63,7 +63,6 @@ services:
       FRONTEND_HOST: localhost:$DEFAULT_PORT
   # ports:
   #   - "4000:4000"
-  #   - "8081:8081"
 
   account-service:
     container_name: account-service
@@ -77,7 +76,7 @@ services:
       KAFKA_BROKER: $KAFKA_BROKER
 
   payment-service:
-    container_name: payment-service
+    # container_name: payment-service
     build:
       context: ./backend
       dockerfile: ./svc/payment-service/Dockerfile
@@ -123,28 +122,6 @@ services:
       - ./scripts/kafka-init:/init
     command: [ "/init/init.sh"]
     
-
-    # payment-service:
-    #   build: ./services/payment-service
-    #   environment:
-    #     - KAFKA_BROKER=kafka:9092
-    #     - CASSANDRA_HOST=cassandra
-    #   depends_on:
-    #     cassandra-init:
-    #       condition: service_completed_successfully
-    #     kafka:
-    #       condition: service_healthy
-
-    # api-gateway:
-    #   build: ./services/api-gateway
-    #   ports: ["8080:8080"]
-    #   depends_on:
-    #     - auth-service
-    #     - account-service
-    #     - payment-service
-
-
-
 # cassandra:
 #   image: cassandra:4.1
 #   ports: ["9042:9042"]
@@ -178,3 +155,12 @@ services:
 #   volumes:
 #     - ./db/postgres-init:/schema
 
+# redis:
+#   image: redis:7-alpine
+#   ports:
+#     - "6379:6379"
+#   healthcheck:
+#     test: ["CMD", "redis-cli", "ping"]
+#     interval: 5s
+#     timeout: 3s
+#     retries: 3

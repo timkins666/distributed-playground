@@ -15,34 +15,40 @@ import Login from "./pages/Login";
 import CssBaseline from "@mui/material/CssBaseline";
 import Logout from "./pages/Logout";
 
+import { ThemeProvider, createTheme } from "@mui/material/styles";
+
+const theme = createTheme({ palette: { mode: "light" } }); // or 'dark'
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <Provider store={store}>
       <CssBaseline>
         <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<RootLayout />}>
-              <Route index path="/" element={<Index />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/logout" element={<Logout />} />
-              <Route
-                path="/accounts"
-                element={
-                  <RequireAuth>
-                    <Accounts />
-                  </RequireAuth>
-                }
-              />
-              <Route
-                path="/admin"
-                element={
-                  <RequireAuth requiredRoles={["admin"]}>
-                    <Admin />
-                  </RequireAuth>
-                }
-              />
-            </Route>
-          </Routes>
+          <ThemeProvider theme={theme}>
+            <Routes>
+              <Route path="/" element={<RootLayout />}>
+                <Route index path="/" element={<Index />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/logout" element={<Logout />} />
+                <Route
+                  path="/accounts"
+                  element={
+                    <RequireAuth>
+                      <Accounts />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/admin"
+                  element={
+                    <RequireAuth requiredRoles={["admin"]}>
+                      <Admin />
+                    </RequireAuth>
+                  }
+                />
+              </Route>
+            </Routes>
+          </ThemeProvider>
         </BrowserRouter>
       </CssBaseline>
     </Provider>
