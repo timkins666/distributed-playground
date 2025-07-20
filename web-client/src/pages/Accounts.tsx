@@ -5,14 +5,14 @@ import { useDispatch, useSelector } from "react-redux";
 import {
   addAccount,
   setAccounts,
-  setTriedLoad as triedLoadAccounts,
+  setTriedLoadAccounts as triedLoadAccounts,
   userAccountsSelector,
 } from "../components/accounts/accountsSlice";
 import { authSelector } from "../components/auth/authSlice";
 import {
   banksSelector,
   setBanks,
-  setTriedLoad as triedLoadBanks,
+  setTriedLoadBanks as triedLoadBanks,
 } from "../components/banks/banksSlice";
 import { gatewayUrl } from "../conf";
 

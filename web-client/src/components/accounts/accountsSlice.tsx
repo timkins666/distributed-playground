@@ -8,7 +8,7 @@ export const accountsSlice = createSlice({
     accounts: [],
   } as AccountsState,
   reducers: {
-    setTriedLoad: (state) => {
+    setTriedLoadAccounts: (state) => {
       state.triedLoad = true;
     },
     setAccounts: (state, newValue) => {
@@ -20,7 +20,7 @@ export const accountsSlice = createSlice({
   },
 });
 
-export const { setTriedLoad, setAccounts, addAccount } = accountsSlice.actions;
+export const { setTriedLoadAccounts, setAccounts, addAccount } = accountsSlice.actions;
 
 export const userAccountsSelector = (store: State) => store.userAccounts;
 

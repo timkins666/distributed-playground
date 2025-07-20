@@ -8,7 +8,7 @@ export const banksSlice = createSlice({
     banks: [],
   } as BankState,
   reducers: {
-    setTriedLoad: (state) => {
+    setTriedLoadBanks: (state) => {
       state.triedLoad = true;
     },
     setBanks: (state, newValue) => {
@@ -17,7 +17,7 @@ export const banksSlice = createSlice({
   },
 });
 
-export const { setTriedLoad, setBanks } = banksSlice.actions;
+export const { setTriedLoadBanks, setBanks } = banksSlice.actions;
 
 export const banksSelector = (store: State) => store.banks;
 

@@ -154,8 +154,8 @@ func checkBalance(req *cmn.PaymentRequest, chn chan<- checkResult) {
 		return
 	}
 
-	log.Printf("Account %d current balance £%f, requested payment of £%f", srcAcc.AccountId, srcAcc.Balance, req.Amount)
-	result.result = srcAcc.Balance >= float64(req.Amount)
+	log.Printf("Account %d current balance £%d, requested payment of £%d", srcAcc.AccountId, srcAcc.Balance, req.Amount)
+	result.result = srcAcc.Balance >= req.Amount
 	chn <- result
 }
 

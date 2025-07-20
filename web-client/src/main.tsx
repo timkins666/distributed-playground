@@ -7,7 +7,6 @@ import store from "./store";
 
 import { RequireAuth } from "./components/auth/auth";
 import RootLayout from "./layouts/RootLayout";
-import Accounts from "./pages/Accounts";
 import Admin from "./pages/Admin";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
@@ -16,6 +15,7 @@ import CssBaseline from "@mui/material/CssBaseline";
 import Logout from "./pages/Logout";
 
 import { ThemeProvider, createTheme } from "@mui/material/styles";
+import Accounts2 from "./pages/Accounts2";
 
 const theme = createTheme({ palette: { mode: "light" } }); // or 'dark'
 
@@ -34,7 +34,7 @@ createRoot(document.getElementById("root")!).render(
                   path="/accounts"
                   element={
                     <RequireAuth>
-                      <Accounts />
+                      <Accounts2 />
                     </RequireAuth>
                   }
                 />
