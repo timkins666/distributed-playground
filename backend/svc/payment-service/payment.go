@@ -14,9 +14,6 @@ import (
 )
 
 func main() {
-	instanceID := os.Getenv("INSTANCE_ID")
-	log.Println("Payment server instanceId", instanceID)
-
 	kafkaBroker := os.Getenv("KAFKA_BROKER")
 	if kafkaBroker == "" {
 		log.Fatalf("KAFKA_BROKER not found")
@@ -25,7 +22,7 @@ func main() {
 	}
 
 	payReqWriter := &kafka.Writer{
-		Addr:  kafka.TCP("kafka:9092"),
+		Addr:  kafka.TCP(kafkaBroker),
 		Topic: cmn.Topics.PaymentRequested(),
 	}
 	defer payReqWriter.Close()

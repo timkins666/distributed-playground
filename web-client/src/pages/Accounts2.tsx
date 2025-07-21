@@ -19,9 +19,9 @@ import {
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
-    addAccount,
     setAccounts,
     setTriedLoadAccounts,
+    updateAccounts,
     userAccountsSelector,
 } from "../components/accounts/accountsSlice";
 import { authSelector } from "../components/auth/authSlice";
@@ -31,6 +31,23 @@ import {
     setTriedLoadBanks,
 } from "../components/banks/banksSlice";
 import { gatewayUrl } from "../conf";
+
+const verifyAndConvertAmount = (amount: number | string): number | null => {
+  amount = parseFloat(amount as string); //takes any type
+
+  if (isNaN(amount)) {
+    console.error("amount not a number");
+    return null; // do error
+  }
+
+  amount *= 100;
+  if (amount <= 0 || amount.toString().includes(".")) {
+    console.error("invalid amount");
+    return null; // do error
+  }
+
+  return amount;
+};
 
 const UserDashboard = () => {
   const dispatch = useDispatch();
@@ -92,31 +109,38 @@ const UserDashboard = () => {
   const [transferAmount, setTransferAmount] = useState("");
 
   const handleCreateAccount = async () => {
+    let initialBalance:number | null = 0
+    if (userAccountState.accounts.length > 0) {
+        initialBalance=verifyAndConvertAmount(newAccountInitialBalance);
+        if (initialBalance === null) {
+            return
+        }
+    }
+
     const res = await fetch(gatewayUrl("account", "new"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${authStatus.token}`,
-    },
-    body: JSON.stringify({name: newAccountName}),
+      },
+      body: JSON.stringify({
+        name: newAccountName,
+        sourceFundsAccountId: parseInt(newAccountSourceId),
+        initialBalance: initialBalance,
+      }),
     });
     const data = await res.json();
-    dispatch(addAccount(data));
-    setCreateOpen(false);
+    if (res.status === 200) {
+        dispatch(updateAccounts(data));
+        setCreateOpen(false);
+        setNewAccountName("")
+    }
   };
 
   const handleTransfer = async () => {
-    let amount = parseFloat(transferAmount);
-
-    if (isNaN(amount)) {
-      console.error("amount not a number");
-      return; // do error
-    }
-
-    amount *= 100;
-    if (amount <= 0 || amount.toString().includes(".")) {
-      console.error("invalid amount");
-      return; // do error
+    const amount = verifyAndConvertAmount(transferAmount)
+    if (!amount) {
+        return
     }
 
     const res = await fetch(gatewayUrl("payment", "pay"), {
@@ -126,8 +150,8 @@ const UserDashboard = () => {
         Authorization: `Bearer ${authStatus.token}`,
       },
       body: JSON.stringify({
-        sourceAccountId: transferFrom,
-        targetAccountId: transferTo,
+        sourceAccountId: parseInt(transferFrom),
+        targetAccountId: parseInt(transferTo),
         appId: Date.now().toString(),
         amount: amount,
       }),

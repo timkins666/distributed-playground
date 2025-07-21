@@ -14,13 +14,18 @@ export const accountsSlice = createSlice({
     setAccounts: (state, newValue) => {
       state.accounts = newValue.payload;
     },
-    addAccount: (state, newValue) => {
-      state.accounts = [...state.accounts, newValue.payload];
+    updateAccounts: (state, newValue) => {
+      const updateIds = newValue.payload.map((acc) => acc.accountId);
+      state.accounts = [
+        ...state.accounts.filter((acc) => !updateIds.includes(acc.accountId)),
+        ...newValue.payload,
+      ].sort((a, b) => a.accountId - b.accountId);
     },
   },
 });
 
-export const { setTriedLoadAccounts, setAccounts, addAccount } = accountsSlice.actions;
+export const { setTriedLoadAccounts, setAccounts, updateAccounts } =
+  accountsSlice.actions;
 
 export const userAccountsSelector = (store: State) => store.userAccounts;
 

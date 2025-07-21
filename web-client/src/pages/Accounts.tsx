@@ -3,16 +3,16 @@ import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 
 import {
-  addAccount,
   setAccounts,
-  setTriedLoadAccounts as triedLoadAccounts,
+  setTriedLoadAccounts,
+  updateAccounts,
   userAccountsSelector,
 } from "../components/accounts/accountsSlice";
 import { authSelector } from "../components/auth/authSlice";
 import {
   banksSelector,
   setBanks,
-  setTriedLoadBanks as triedLoadBanks,
+  setTriedLoadBanks,
 } from "../components/banks/banksSlice";
 import { gatewayUrl } from "../conf";
 
@@ -27,7 +27,7 @@ export default function Accounts() {
       console.log("Already tried loading banks, not trying again");
     }
 
-    dispatch(triedLoadBanks());
+    dispatch(setTriedLoadBanks());
     const getBanks = async () => {
       if (bankState.triedLoad) {
         return;
@@ -50,7 +50,7 @@ export default function Accounts() {
       return;
     }
 
-    dispatch(triedLoadAccounts());
+    dispatch(setTriedLoadAccounts());
     const getAccounts = async () => {
       const res = await fetch(gatewayUrl("account", "myaccounts"), {
         method: "GET",
@@ -75,7 +75,7 @@ export default function Accounts() {
       },
     });
     const data = await res.json();
-    dispatch(addAccount(data));
+    dispatch(updateAccounts(data));
   };
 
   const sendMoney = async (fromAcct: number) => {

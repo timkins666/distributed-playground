@@ -43,7 +43,7 @@ func paymentValidator(kafkaBroker string, cancelCtx context.Context) {
 			msg, err := reader.ReadMessage(context.Background())
 			if err != nil {
 				log.Println("READ MSG ERROR", err)
-				max_errors -= 1
+				max_errors--
 				if max_errors == 0 {
 					log.Println("Max errors reached, something seems wrong...")
 					break
@@ -139,13 +139,7 @@ func checkBalance(req *cmn.PaymentRequest, chn chan<- checkResult) {
 
 	result := checkResult{checkName: checkName}
 
-	var srcAcc *Account
-	for _, acc := range openAccounts {
-		if acc.AccountId == req.SourceAccountId {
-			srcAcc = &acc
-			break
-		}
-	}
+	srcAcc := getAccountById(req.SourceAccountId, nil)
 
 	if srcAcc == nil {
 		log.Printf("ERROR: Account id %d not found", req.SourceAccountId)
@@ -170,13 +164,7 @@ func checkTargetAccount(req *cmn.PaymentRequest, chn chan<- checkResult) {
 
 	result := checkResult{checkName: checkName}
 
-	var tgtAcc *Account
-	for _, acc := range openAccounts {
-		if acc.AccountId == req.SourceAccountId {
-			tgtAcc = &acc
-			break
-		}
-	}
+	tgtAcc := getAccountById(req.SourceAccountId, nil)
 
 	if tgtAcc == nil {
 		log.Printf("ERROR: Target account id %d not found", req.TargetAccountId)

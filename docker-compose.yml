@@ -122,6 +122,27 @@ services:
       - ./scripts/kafka-init:/init
     command: [ "/init/init.sh"]
     
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: me
+      POSTGRES_PASSWORD: me
+    volumes:
+      - ./volumes/postgres_data:/var/lib/postgresql/data
+
+  postgres-init:
+    image: postgres:15
+    depends_on:
+      - postgres
+        # condition: service_healthy
+    volumes:
+      - ./scripts/postgres-init:/init
+    environment:
+      PGPASSWORD: me  # Needed for psql to auth
+    entrypoint: ["sh","-c","psql -h postgres -U me -f /init/init.sql"]
+
+  
 # cassandra:
 #   image: cassandra:4.1
 #   ports: ["9042:9042"]
@@ -139,21 +160,7 @@ services:
 #   volumes:
 #     - ./db/cassandra-init:/schema
 
-# postgres:
-#   image: postgres:15
-#   environment:
-#     POSTGRES_USER: me
-#     POSTGRES_PASSWORD: me
-#   ports: ["5432:5432"]
 
-# postgres-init:
-#   image: postgres:15
-#   depends_on:
-#     postgres:
-#       condition: service_healthy
-#   entrypoint: ["sh","-c","psql -h postgres -U me -f /schema/init.sql"]
-#   volumes:
-#     - ./db/postgres-init:/schema
 
 # redis:
 #   image: redis:7-alpine
