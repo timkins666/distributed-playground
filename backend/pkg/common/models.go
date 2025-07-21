@@ -24,8 +24,8 @@ type PaymentRequest struct {
 	AppId           string    `json:"appId"`
 	SystemId        string    `json:"systemId,omitempty"`
 	Amount          int64     `json:"amount"`
-	SourceAccountId int       `json:"sourceAccountId"`
-	TargetAccountId int       `json:"targetAccountId"`
+	SourceAccountId int32     `json:"sourceAccountId"`
+	TargetAccountId int32     `json:"targetAccountId"`
 	Timestamp       time.Time `json:"timestamp"`
 }
 
@@ -38,4 +38,10 @@ func (pr *PaymentRequest) Valid() bool {
 		pr.TargetAccountId > 0 &&
 		time.Now().UTC().After(pr.Timestamp) &&
 		pr.Timestamp.After(time.Now().Add(-10*time.Second))
+}
+
+type Transaction struct {
+	TxID      string
+	Amount    int64
+	AccountID int32
 }

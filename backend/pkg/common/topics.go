@@ -1,6 +1,6 @@
 package common
 
-// defines immutable topic constants
+// defines immutable topic constants, possibly not very idiomatic
 
 type topics struct{}
 

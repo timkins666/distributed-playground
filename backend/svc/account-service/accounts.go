@@ -12,17 +12,17 @@ import (
 )
 
 type Account struct {
-	AccountId int    `json:"accountId"`
+	AccountId int32  `json:"accountId"`
 	Name      string `json:"name"`
 	Username  string `json:"username"`
 	Balance   int64  `json:"balance"`
-	BankId    int    `json:"bankId"`
+	BankId    int32  `json:"bankId"`
 	BankName  string `json:"bankName"`
 }
 
 type Bank struct {
 	Name string `json:"name"`
-	Id   int    `json:"id"`
+	Id   int32  `json:"id"`
 }
 
 var (
@@ -31,12 +31,6 @@ var (
 )
 
 func main() {
-	kafkaBroker := os.Getenv("KAFKA_BROKER")
-	if kafkaBroker == "" {
-		log.Fatalf("KAFKA_BROKER not found")
-	}
-	log.Println("kafka broker:", kafkaBroker)
-
 	mux := http.NewServeMux()
 	mux.HandleFunc("/banks", getAllBanksHandler)
 	mux.HandleFunc("/myaccounts", getUserAccountsHandler)
@@ -45,7 +39,7 @@ func main() {
 	cancelCtx, stop := cmn.GetCancelContext()
 	defer stop()
 
-	go paymentValidator(kafkaBroker, cancelCtx)
+	go paymentValidator(cancelCtx)
 
 	port := ":" + os.Getenv("SERVE_PORT")
 	log.Printf("Accounts service running on %s", port)
@@ -63,7 +57,7 @@ func getUserAccounts(username string) []*Account {
 	return userAccounts
 }
 
-func getAccountById(accountId int, accounts []*Account) *Account {
+func getAccountById(accountId int32, accounts []*Account) *Account {
 	// get account matching id.
 	// optionally pass a pre-filtered account list, or nil to search all.
 	if accounts == nil {
@@ -106,7 +100,7 @@ func getUserAccountsHandler(w http.ResponseWriter, r *http.Request) {
 
 type newAccountRequest struct {
 	Name                 string `json:"name"`
-	SourceFundsAccountId int    `json:"sourceFundsAccountId"`
+	SourceFundsAccountId int32  `json:"sourceFundsAccountId"`
 	InitialBalance       int64  `json:"initialBalance"`
 }
 
@@ -159,7 +153,7 @@ func createUserAccountHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	newAccount := &Account{
-		AccountId: len(openAccounts) + 1,
+		AccountId: int32(len(openAccounts) + 1),
 		Name:      req.Name,
 		Username:  user.Username,
 		Balance:   req.InitialBalance,

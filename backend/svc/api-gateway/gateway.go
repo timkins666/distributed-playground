@@ -13,11 +13,6 @@ var proxyHosts map[string]string = map[string]string{
 }
 
 func main() {
-	kafkaBroker := os.Getenv("KAFKA_BROKER")
-	if kafkaBroker == "" {
-		log.Panicf("KAFKA_BROKER not set")
-	}
-
 	mux := http.NewServeMux()
 	mux.HandleFunc("/login", loginHandler)
 

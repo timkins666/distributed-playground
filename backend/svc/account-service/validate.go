@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand/v2"
+	"os"
 	"strings"
 	"time"
 
@@ -24,14 +25,23 @@ type paymentValidationResult struct {
 	timedOut       bool
 }
 
-func paymentValidator(kafkaBroker string, cancelCtx context.Context) {
+func paymentValidator(cancelCtx context.Context) {
 	// handles validation of requested payments
+
+	// TODO: init kafkas in main
+	broker := os.Getenv("KAFKA_BROKER")
 	reader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers: []string{kafkaBroker},
+		Brokers: []string{broker},
 		Topic:   cmn.Topics.PaymentRequested(),
 		GroupID: "payment-validator",
 	})
 	defer reader.Close()
+
+	writer := &kafka.Writer{
+		Addr:         kafka.TCP(broker),
+		RequiredAcks: 1,
+		MaxAttempts:  5,
+	}
 
 	max_errors := 10
 	for {
@@ -50,12 +60,12 @@ func paymentValidator(kafkaBroker string, cancelCtx context.Context) {
 				}
 				continue
 			}
-			go handlePaymentRequestedMessage(msg, cancelCtx)
+			go handlePaymentRequestedMessage(msg, writer, cancelCtx)
 		}
 	}
 }
 
-func handlePaymentRequestedMessage(message kafka.Message, cancelCtx context.Context) {
+func handlePaymentRequestedMessage(message kafka.Message, writer *kafka.Writer, cancelCtx context.Context) {
 	var req cmn.PaymentRequest
 	err := json.Unmarshal(message.Value, &req)
 	if err != nil {
@@ -82,14 +92,14 @@ func handlePaymentRequestedMessage(message kafka.Message, cancelCtx context.Cont
 
 			if len(validateResult.results) == numChecks {
 				log.Println("all checks complete for request", req.SystemId)
-				go handleResults(validateResult, cancelCtx)
+				go handleResults(validateResult, writer, cancelCtx)
 				return
 			}
 			log.Printf("waiting for %d remaining check for request %s", numChecks-len(validateResult.results), req.SystemId)
 		case <-time.After(4500 * time.Millisecond): // 4.5s timeout to return so some will fail
 			log.Println("Checks timed out for request", req.SystemId)
 			validateResult.timedOut = true
-			go handleResults(validateResult, cancelCtx)
+			go handleResults(validateResult, writer, cancelCtx)
 			return
 		case <-cancelCtx.Done():
 			return
@@ -97,9 +107,9 @@ func handlePaymentRequestedMessage(message kafka.Message, cancelCtx context.Cont
 	}
 }
 
-func handleResults(result *paymentValidationResult, cancelCtx context.Context) {
+func handleResults(result *paymentValidationResult, writer *kafka.Writer, cancelCtx context.Context) {
 	if result.timedOut {
-		sendPaymentFailed(result.paymentRequest, "timeout", cancelCtx)
+		sendPaymentFailed(result.paymentRequest, "timeout", writer, cancelCtx)
 		return
 	}
 
@@ -111,25 +121,59 @@ func handleResults(result *paymentValidationResult, cancelCtx context.Context) {
 	}
 
 	if len(errs) > 0 {
-		go sendPaymentFailed(result.paymentRequest, strings.Join(errs, ", "), cancelCtx)
+		go sendPaymentFailed(result.paymentRequest, strings.Join(errs, ", "), writer, cancelCtx)
 		return
 	}
 
-	go initiateTransaction(result.paymentRequest, cancelCtx)
+	// TODO: lock funds to prevent races before submitting transaction
+	go initiateTransaction(result.paymentRequest, writer, cancelCtx)
 }
 
-func sendPaymentFailed(req *cmn.PaymentRequest, reason string, _ context.Context) {
-	// send payment failed message for gateway or future notification service
-	log.Printf("Payment of £%f failed for account %d: %s", req.Amount, req.TargetAccountId, reason)
+func sendPaymentFailed(req *cmn.PaymentRequest, reason string, _ *kafka.Writer, _ context.Context) {
+	// TODO: send payment failed message for gateway (or future notification service)
+	log.Printf("Payment of £%d failed for account %d: %s", req.Amount, req.TargetAccountId, reason)
 }
 
-func initiateTransaction(req *cmn.PaymentRequest, _ context.Context) {
-	// send message for transaction service
-	log.Printf("Initiate transaction of £%f from account %d to account %d", req.Amount, req.SourceAccountId, req.TargetAccountId)
+func initiateTransaction(req *cmn.PaymentRequest, writer *kafka.Writer, cancelCtx context.Context) {
+	// send message(s) for transaction service
+
+	// TODO: include both accounts for transfers within bank?
+
+	log.Printf("Initiate transaction of £%d from account %d to account %d", req.Amount, req.SourceAccountId, req.TargetAccountId)
+
+	txOut, err1 := json.Marshal(cmn.Transaction{
+		TxID:      req.SystemId,
+		AccountID: req.SourceAccountId,
+		Amount:    -req.Amount,
+	})
+	txIn, err2 := json.Marshal(cmn.Transaction{
+		TxID:      req.SystemId,
+		AccountID: req.TargetAccountId,
+		Amount:    req.Amount,
+	})
+
+	if err1 != nil || err2 != nil {
+		sendPaymentFailed(req, "processing error", writer, cancelCtx)
+	}
+
+	err := writer.WriteMessages(cancelCtx,
+		kafka.Message{
+			Topic: cmn.Topics.TransactionRequested(),
+			Value: txOut,
+		},
+		kafka.Message{
+			Topic: cmn.Topics.TransactionRequested(),
+			Value: txIn,
+		})
+
+	if err != nil {
+		sendPaymentFailed(req, "failed to initiate transaction", writer, cancelCtx)
+	}
+
 }
 
 func checkBalance(req *cmn.PaymentRequest, chn chan<- checkResult) {
-	// check source account has funds
+	// check source account has required funds
 	checkName := "balance"
 
 	// artificial delay

@@ -19,7 +19,7 @@ func proxyToService(w http.ResponseWriter, r *http.Request) {
 
 	host, ok := proxyHosts[strings.ToLower(service)]
 	if !ok {
-		log.Println("Requested unknown service %s", service)
+		log.Printf("Requested unknown service %s", service)
 		http.Error(w, "Unknown", http.StatusNotFound)
 	}
 
