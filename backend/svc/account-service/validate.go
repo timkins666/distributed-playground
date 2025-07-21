@@ -91,13 +91,13 @@ func handlePaymentRequestedMessage(message kafka.Message, writer *kafka.Writer, 
 			validateResult.results = append(validateResult.results, res)
 
 			if len(validateResult.results) == numChecks {
-				log.Println("all checks complete for request", req.SystemId)
+				log.Println("all checks complete for request", req.SystemID)
 				go handleResults(validateResult, writer, cancelCtx)
 				return
 			}
-			log.Printf("waiting for %d remaining check for request %s", numChecks-len(validateResult.results), req.SystemId)
+			log.Printf("waiting for %d remaining check for request %s", numChecks-len(validateResult.results), req.SystemID)
 		case <-time.After(4500 * time.Millisecond): // 4.5s timeout to return so some will fail
-			log.Println("Checks timed out for request", req.SystemId)
+			log.Println("Checks timed out for request", req.SystemID)
 			validateResult.timedOut = true
 			go handleResults(validateResult, writer, cancelCtx)
 			return
@@ -131,7 +131,7 @@ func handleResults(result *paymentValidationResult, writer *kafka.Writer, cancel
 
 func sendPaymentFailed(req *cmn.PaymentRequest, reason string, _ *kafka.Writer, _ context.Context) {
 	// TODO: send payment failed message for gateway (or future notification service)
-	log.Printf("Payment of £%d failed for account %d: %s", req.Amount, req.TargetAccountId, reason)
+	log.Printf("Payment of £%d failed for account %d: %s", req.Amount, req.TargetAccountID, reason)
 }
 
 func initiateTransaction(req *cmn.PaymentRequest, writer *kafka.Writer, cancelCtx context.Context) {
@@ -139,16 +139,16 @@ func initiateTransaction(req *cmn.PaymentRequest, writer *kafka.Writer, cancelCt
 
 	// TODO: include both accounts for transfers within bank?
 
-	log.Printf("Initiate transaction of £%d from account %d to account %d", req.Amount, req.SourceAccountId, req.TargetAccountId)
+	log.Printf("Initiate transaction of £%d from account %d to account %d", req.Amount, req.SourceAccountID, req.TargetAccountID)
 
 	txOut, err1 := json.Marshal(cmn.Transaction{
-		TxID:      req.SystemId,
-		AccountID: req.SourceAccountId,
+		TxID:      req.SystemID,
+		AccountID: req.SourceAccountID,
 		Amount:    -req.Amount,
 	})
 	txIn, err2 := json.Marshal(cmn.Transaction{
-		TxID:      req.SystemId,
-		AccountID: req.TargetAccountId,
+		TxID:      req.SystemID,
+		AccountID: req.TargetAccountID,
 		Amount:    req.Amount,
 	})
 
@@ -183,16 +183,16 @@ func checkBalance(req *cmn.PaymentRequest, chn chan<- checkResult) {
 
 	result := checkResult{checkName: checkName}
 
-	srcAcc := getAccountById(req.SourceAccountId, nil)
+	srcAcc := getAccountByID(req.SourceAccountID, nil)
 
 	if srcAcc == nil {
-		log.Printf("ERROR: Account id %d not found", req.SourceAccountId)
+		log.Printf("ERROR: Account id %d not found", req.SourceAccountID)
 		result.result = false // TODO: unneccessary cos default but wait for tests
 		chn <- result
 		return
 	}
 
-	log.Printf("Account %d current balance £%d, requested payment of £%d", srcAcc.AccountId, srcAcc.Balance, req.Amount)
+	log.Printf("Account %d current balance £%d, requested payment of £%d", srcAcc.AccountID, srcAcc.Balance, req.Amount)
 	result.result = srcAcc.Balance >= req.Amount
 	chn <- result
 }
@@ -208,10 +208,10 @@ func checkTargetAccount(req *cmn.PaymentRequest, chn chan<- checkResult) {
 
 	result := checkResult{checkName: checkName}
 
-	tgtAcc := getAccountById(req.SourceAccountId, nil)
+	tgtAcc := getAccountByID(req.SourceAccountID, nil)
 
 	if tgtAcc == nil {
-		log.Printf("ERROR: Target account id %d not found", req.TargetAccountId)
+		log.Printf("ERROR: Target account id %d not found", req.TargetAccountID)
 		result.result = false
 		chn <- result
 		return

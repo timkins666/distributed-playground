@@ -13,7 +13,7 @@ import (
 
 var secretKey = []byte("super-secret-shh")
 
-func CreateUserToken(user User) (string, error) {
+func CreateUserToken(user *User) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256,
 		jwt.MapClaims{
 			"username": user.Username,
@@ -33,7 +33,7 @@ func VerifyToken(r *http.Request) (*jwt.Token, error) {
 	headerStr := r.Header.Get("Authorization")
 
 	if !strings.HasPrefix(headerStr, "Bearer ") {
-		return nil, errors.New("Invalid header")
+		return nil, errors.New("invalid header")
 	}
 	headerStr = strings.TrimPrefix(headerStr, "Bearer ")
 

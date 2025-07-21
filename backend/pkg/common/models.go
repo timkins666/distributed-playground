@@ -12,6 +12,7 @@ type LoginRequest struct {
 }
 
 type User struct {
+	ID       int32    `json:"id"`
 	Username string   `json:"username"`
 	Roles    []string `json:"roles"`
 }
@@ -21,21 +22,21 @@ func (u *User) Valid() bool {
 }
 
 type PaymentRequest struct {
-	AppId           string    `json:"appId"`
-	SystemId        string    `json:"systemId,omitempty"`
+	AppID           string    `json:"appId"`
+	SystemID        string    `json:"systemId,omitempty"`
 	Amount          int64     `json:"amount"`
-	SourceAccountId int32     `json:"sourceAccountId"`
-	TargetAccountId int32     `json:"targetAccountId"`
+	SourceAccountID int32     `json:"sourceAccountId"`
+	TargetAccountID int32     `json:"targetAccountId"`
 	Timestamp       time.Time `json:"timestamp"`
 }
 
 func (pr *PaymentRequest) Valid() bool {
 	// checks all fields populated and imposes arbitrary timeout
-	return pr.AppId != "" &&
-		pr.SystemId != "" &&
+	return pr.AppID != "" &&
+		pr.SystemID != "" &&
 		pr.Amount > 0 &&
-		pr.SourceAccountId > 0 &&
-		pr.TargetAccountId > 0 &&
+		pr.SourceAccountID > 0 &&
+		pr.TargetAccountID > 0 &&
 		time.Now().UTC().After(pr.Timestamp) &&
 		pr.Timestamp.After(time.Now().Add(-10*time.Second))
 }

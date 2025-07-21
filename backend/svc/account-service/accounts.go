@@ -12,22 +12,22 @@ import (
 )
 
 type Account struct {
-	AccountId int32  `json:"accountId"`
+	AccountID int32  `json:"accountId"`
 	Name      string `json:"name"`
 	Username  string `json:"username"`
 	Balance   int64  `json:"balance"`
-	BankId    int32  `json:"bankId"`
+	BankID    int32  `json:"bankId"`
 	BankName  string `json:"bankName"`
 }
 
 type Bank struct {
 	Name string `json:"name"`
-	Id   int32  `json:"id"`
+	ID   int32  `json:"id"`
 }
 
 var (
 	openAccounts []*Account = []*Account{}
-	banks        []*Bank    = []*Bank{{Name: "Bonzo", Id: 1}}
+	banks        []*Bank    = []*Bank{{Name: "Bonzo", ID: 1}}
 )
 
 func main() {
@@ -57,7 +57,7 @@ func getUserAccounts(username string) []*Account {
 	return userAccounts
 }
 
-func getAccountById(accountId int32, accounts []*Account) *Account {
+func getAccountByID(accountID int32, accounts []*Account) *Account {
 	// get account matching id.
 	// optionally pass a pre-filtered account list, or nil to search all.
 	if accounts == nil {
@@ -65,7 +65,7 @@ func getAccountById(accountId int32, accounts []*Account) *Account {
 	}
 
 	for _, acc := range accounts {
-		if acc.AccountId == accountId {
+		if acc.AccountID == accountID {
 			return acc
 		}
 	}
@@ -100,7 +100,7 @@ func getUserAccountsHandler(w http.ResponseWriter, r *http.Request) {
 
 type newAccountRequest struct {
 	Name                 string `json:"name"`
-	SourceFundsAccountId int32  `json:"sourceFundsAccountId"`
+	SourceFundsAccountID int32  `json:"sourceFundsAccountId"`
 	InitialBalance       int64  `json:"initialBalance"`
 }
 
@@ -129,11 +129,11 @@ func createUserAccountHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		sourceAcc = getAccountById(req.SourceFundsAccountId, userAccounts)
+		sourceAcc = getAccountByID(req.SourceFundsAccountID, userAccounts)
 		if sourceAcc == nil {
 			log.Printf(
 				"Account %d not found. Doesn't exist or not owned by user %s",
-				req.SourceFundsAccountId,
+				req.SourceFundsAccountID,
 				user.Username,
 			)
 			w.WriteHeader(http.StatusBadRequest)
@@ -153,11 +153,11 @@ func createUserAccountHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	newAccount := &Account{
-		AccountId: int32(len(openAccounts) + 1),
+		AccountID: int32(len(openAccounts) + 1),
 		Name:      req.Name,
 		Username:  user.Username,
 		Balance:   req.InitialBalance,
-		BankId:    banks[0].Id,
+		BankID:    banks[0].ID,
 		BankName:  banks[0].Name,
 	}
 

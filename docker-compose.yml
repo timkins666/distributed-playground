@@ -4,7 +4,7 @@ services:
     build:
       context: ./web-client
     ports:
-      - "$FRONTEND_PORT:$FRONTEND_PORT"
+      - $FRONTEND_PORT:$FRONTEND_PORT
     volumes:
       - ./web-client:/app
       - /app/node_modules
@@ -37,9 +37,10 @@ services:
     container_name: gateway
     build:
       context: ./backend
-      dockerfile: ./svc/api-gateway/Dockerfile
+      dockerfile: ./Dockerfile
       args:
         GO_VERSION: $GO_VERSION
+        SERVICE_NAME: api-gateway
     environment:
       SERVE_PORT: $GATEWAY_PORT
       AUTH_SERVICE_HOST: http://auth-service:$AUTH_PORT
@@ -55,12 +56,17 @@ services:
     container_name: auth-service
     build:
       context: ./backend
-      dockerfile: ./svc/auth-service/Dockerfile
+      dockerfile: ./Dockerfile
       args:
         GO_VERSION: $GO_VERSION
+        SERVICE_NAME: auth-service
+    depends_on:
+      postgres-init:
+        condition: service_completed_successfully
     environment:
       SERVE_PORT: $AUTH_PORT
       FRONTEND_HOST: localhost:$DEFAULT_PORT
+      POSTGRES_HOST: $POSTGRES_HOST
   # ports:
   #   - "4000:4000"
 
@@ -68,20 +74,23 @@ services:
     container_name: account-service
     build:
       context: ./backend
-      dockerfile: ./svc/account-service/Dockerfile
+      dockerfile: ./Dockerfile
       args:
         GO_VERSION: $GO_VERSION
+        SERVICE_NAME: account-service
     environment:
       SERVE_PORT: $ACCOUNT_PORT
       KAFKA_BROKER: $KAFKA_BROKER
+      POSTGRES_HOST: $POSTGRES_HOST
 
   payment-service:
-    # container_name: payment-service
+    container_name: payment-service
     build:
       context: ./backend
-      dockerfile: ./svc/payment-service/Dockerfile
+      dockerfile: ./Dockerfile
       args:
         GO_VERSION: $GO_VERSION
+        SERVICE_NAME: payment-service
     environment:
       SERVE_PORT: $PAYMENT_PORT
       KAFKA_BROKER: $KAFKA_BROKER
@@ -122,26 +131,36 @@ services:
       - ./scripts/kafka-init:/init
     command: [ "/init/init.sh"]
     
-
   postgres:
-    image: postgres:15
+    image: postgres:17.5
+    container_name: postgres
     environment:
-      POSTGRES_USER: me
-      POSTGRES_PASSWORD: me
-    volumes:
-      - ./volumes/postgres_data:/var/lib/postgresql/data
+      POSTGRES_DB: banking
+      POSTGRES_PASSWORD: postgres
+    user: postgres
+    # volumes:
+    #   - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready", "-U", "postgres"] #, "-d", "db_prod"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
 
   postgres-init:
-    image: postgres:15
+    image: postgres:17.5
+    container_name: postgres-init
     depends_on:
-      - postgres
-        # condition: service_healthy
+      postgres:
+        condition: service_healthy
     volumes:
       - ./scripts/postgres-init:/init
     environment:
-      PGPASSWORD: me  # Needed for psql to auth
-    entrypoint: ["sh","-c","psql -h postgres -U me -f /init/init.sql"]
+      PGPASSWORD: postgres  # Needed for psql to auth
+    entrypoint: ["sh","-c","psql -h postgres -U postgres -f /init/init.sql"]
 
+
+volumes:
+ postgres_data:
   
 # cassandra:
 #   image: cassandra:4.1

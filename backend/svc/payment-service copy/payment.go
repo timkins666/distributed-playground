@@ -14,8 +14,15 @@ import (
 )
 
 func main() {
+	kafkaBroker := os.Getenv("KAFKA_BROKER")
+	if kafkaBroker == "" {
+		log.Fatalf("KAFKA_BROKER not found")
+	} else {
+		log.Println("broker env", kafkaBroker)
+	}
+
 	payReqWriter := &kafka.Writer{
-		Addr:  kafka.TCP(cmn.KafkaBroker()),
+		Addr:  kafka.TCP("kafka:9092"),
 		Topic: cmn.Topics.PaymentRequested(),
 	}
 	defer payReqWriter.Close()
@@ -45,21 +52,14 @@ func handlePaymentRequest(writer *kafka.Writer) func(w http.ResponseWriter, r *h
 			return
 		}
 
-		msg, err := json.Marshal(req)
+		msg, _ := json.Marshal(req)
+		err := writer.WriteMessages(context.Background(), kafka.Message{Value: msg})
 		if err != nil {
 			log.Println("WRITE ERR:", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
+		} else {
+			log.Printf("Sent payment-requested message: %s", msg)
 		}
 
-		err = writer.WriteMessages(context.Background(), kafka.Message{Value: msg})
-		if err != nil {
-			log.Println("WRITE ERR:", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		log.Printf("Sent payment-requested message: %s", msg)
 		w.WriteHeader(http.StatusAccepted)
 	}
 }
