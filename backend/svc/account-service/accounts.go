@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -8,109 +10,125 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/google/uuid"
+	"github.com/segmentio/kafka-go"
+	"github.com/timkins666/distributed-playground/backend/pkg/appdb"
 	cmn "github.com/timkins666/distributed-playground/backend/pkg/common"
 )
 
-type Account struct {
-	AccountID int32  `json:"accountId"`
-	Name      string `json:"name"`
-	Username  string `json:"username"`
-	Balance   int64  `json:"balance"`
-	BankID    int32  `json:"bankId"`
-	BankName  string `json:"bankName"`
-}
-
-type Bank struct {
-	Name string `json:"name"`
-	ID   int32  `json:"id"`
-}
-
 var (
-	openAccounts []*Account = []*Account{}
-	banks        []*Bank    = []*Bank{{Name: "Bonzo", ID: 1}}
+	banks []*cmn.Bank = []*cmn.Bank{{Name: "Bonzo", ID: 1}} // tmp
 )
 
+type app struct {
+	cancelCtx    context.Context
+	db           *appdb.DB
+	payReqReader *kafka.Reader
+	writer       *kafka.Writer
+	log          *log.Logger
+}
+
 func main() {
+	kafkaBroker := cmn.KafkaBroker()
+
+	cancelCtx, stop := cmn.GetCancelContext()
+	defer stop()
+
+	db, err := appdb.InitDB(appdb.DefaultConfig)
+	if err != nil {
+		log.Panicln("Failed to initialise pstgres")
+	}
+
+	app := app{
+		cancelCtx: cancelCtx,
+		log:       cmn.AppLogger(),
+		payReqReader: kafka.NewReader(kafka.ReaderConfig{
+			Brokers: []string{kafkaBroker},
+			Topic:   cmn.Topics.PaymentRequested(),
+			GroupID: "payment-validator",
+		}),
+		writer: &kafka.Writer{
+			Addr:         kafka.TCP(kafkaBroker),
+			RequiredAcks: 1,
+			MaxAttempts:  5,
+		},
+		db: db,
+	}
+
+	defer app.payReqReader.Close()
+	defer app.writer.Close()
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/banks", getAllBanksHandler)
 	mux.HandleFunc("/myaccounts", getUserAccountsHandler)
 	mux.HandleFunc("/new", createUserAccountHandler)
 
-	cancelCtx, stop := cmn.GetCancelContext()
-	defer stop()
-
-	go paymentValidator(cancelCtx)
+	go paymentValidator(app)
 
 	port := ":" + os.Getenv("SERVE_PORT")
-	log.Printf("Accounts service running on %s", port)
-	log.Fatal(http.ListenAndServe(port, mux))
-}
-
-func getUserAccounts(username string) []*Account {
-	// get accounts from the user from the lazy lazy slice
-	userAccounts := []*Account{}
-	for _, acc := range openAccounts {
-		if acc.Username == username {
-			userAccounts = append(userAccounts, acc)
-		}
-	}
-	return userAccounts
-}
-
-func getAccountByID(accountID int32, accounts []*Account) *Account {
-	// get account matching id.
-	// optionally pass a pre-filtered account list, or nil to search all.
-	if accounts == nil {
-		accounts = openAccounts
-	}
-
-	for _, acc := range accounts {
-		if acc.AccountID == accountID {
-			return acc
-		}
-	}
-
-	return nil
+	app.log.Printf("Accounts service running on %s", port)
+	log.Fatal(http.ListenAndServe(port,
+		cmn.SetUserIDMiddlewareHandler(
+			cmn.SetContextValuesMiddleware(
+				map[cmn.ContextKey]any{cmn.AppKey: app})(mux))))
 }
 
 func getAllBanksHandler(w http.ResponseWriter, r *http.Request) {
-	user, err := cmn.GetUserFromClaims(r)
-	if err != nil || !user.Valid() {
+	app, _ := r.Context().Value(cmn.AppKey).(app)
+	userID, ok := r.Context().Value(cmn.UserIDKey).(int)
+
+	if userID == 0 || !ok {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Println(w, "Nope")
 		return
 	}
 
-	log.Printf("getallbanks user %s", user.Username)
+	user, err := app.db.LoadUserByID(userID)
+	if err != nil || !user.Valid() {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Println(w, "Nope")
+	}
+
+	app.log.Printf("getallbanks user %s", user.Username)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(banks)
 }
 
 func getUserAccountsHandler(w http.ResponseWriter, r *http.Request) {
-	user, err := cmn.GetUserFromClaims(r)
-	if err != nil || !user.Valid() {
+	app, _ := r.Context().Value(cmn.AppKey).(app)
+	userID, _ := r.Context().Value(cmn.UserIDKey).(int)
+
+	if userID == 0 {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Println(w, "Nope")
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(getUserAccounts(user.Username))
+	accs, err := app.db.GetUserAccounts(userID)
+
+	if err == nil || err == sql.ErrNoRows {
+		if len(accs) == 0 {
+			accs = []cmn.Account{}
+		}
+		app.log.Printf("Accs: %+v", accs)
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(accs)
+		return
+	}
+
+	w.WriteHeader(http.StatusInternalServerError)
+	fmt.Println(w, "Nope")
 }
 
 type newAccountRequest struct {
 	Name                 string `json:"name"`
-	SourceFundsAccountID int32  `json:"sourceFundsAccountId"`
+	SourceFundsAccountID int    `json:"sourceFundsAccountId"`
 	InitialBalance       int64  `json:"initialBalance"`
 }
 
 func createUserAccountHandler(w http.ResponseWriter, r *http.Request) {
-	user, err := cmn.GetUserFromClaims(r)
-	if err != nil || !user.Valid() {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Println(w, "Nope")
-		return
-	}
+	app, _ := r.Context().Value(cmn.AppKey).(app)
+	userID, _ := r.Context().Value(cmn.UserIDKey).(int)
 
 	var req *newAccountRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -119,8 +137,12 @@ func createUserAccountHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var sourceAcc *Account
-	userAccounts := getUserAccounts(user.Username)
+	var sourceAcc *cmn.Account
+	userAccounts, err := app.db.GetUserAccounts(userID)
+	if err != nil {
+		// TODO: handle err
+	}
+
 	if len(userAccounts) > 0 {
 		if req.InitialBalance <= 0 {
 			w.WriteHeader(http.StatusBadRequest)
@@ -129,12 +151,12 @@ func createUserAccountHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		sourceAcc = getAccountByID(req.SourceFundsAccountID, userAccounts)
+		sourceAcc, err = app.db.GetAccountByID(req.SourceFundsAccountID)
 		if sourceAcc == nil {
-			log.Printf(
+			app.log.Printf(
 				"Account %d not found. Doesn't exist or not owned by user %s",
 				req.SourceFundsAccountID,
-				user.Username,
+				userID,
 			)
 			w.WriteHeader(http.StatusBadRequest)
 			resp := map[string]string{"errorReason": "Invalid source account"}
@@ -152,22 +174,49 @@ func createUserAccountHandler(w http.ResponseWriter, r *http.Request) {
 		req.InitialBalance = rand.Int64N(10e5)
 	}
 
-	newAccount := &Account{
-		AccountID: int32(len(openAccounts) + 1),
-		Name:      req.Name,
-		Username:  user.Username,
-		Balance:   req.InitialBalance,
-		BankID:    banks[0].ID,
-		BankName:  banks[0].Name,
+	newAccount := cmn.Account{
+		Name:     req.Name,
+		UserID:   userID,
+		Balance:  req.InitialBalance,
+		BankID:   banks[0].ID,
+		BankName: banks[0].Name,
 	}
 
-	log.Println("Opened new account", newAccount)
+	if accID, err := app.db.CreateAccount(newAccount); err != nil || accID <= 0 {
+		app.log.Println("ERROR: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Println(w, "Error creating account")
+		return
+	} else {
+		newAccount.AccountID = accID
+	}
 
-	openAccounts = append(openAccounts, newAccount)
-	respAccounts := []Account{*newAccount}
+	app.log.Println("Opened new account", newAccount)
 
-	// lazy. TODO: transaction
+	respAccounts := []cmn.Account{newAccount}
+
+	txJson, _ := json.Marshal(cmn.Transaction{
+		TxID:      uuid.NewString(),
+		Amount:    newAccount.Balance,
+		AccountID: newAccount.AccountID,
+	})
+	app.writer.WriteMessages(app.cancelCtx,
+		kafka.Message{
+			Topic: cmn.Topics.TransactionRequested(),
+			Value: txJson,
+		})
+
 	if sourceAcc != nil {
+		txJson, _ := json.Marshal(cmn.Transaction{
+			TxID:      uuid.NewString(),
+			Amount:    -newAccount.Balance,
+			AccountID: req.SourceFundsAccountID,
+		})
+		app.writer.WriteMessages(app.cancelCtx,
+			kafka.Message{
+				Topic: cmn.Topics.TransactionRequested(),
+				Value: txJson,
+			})
 		sourceAcc.Balance -= req.InitialBalance
 		respAccounts = append(respAccounts, *sourceAcc)
 	}

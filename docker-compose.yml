@@ -49,7 +49,7 @@ services:
       FRONTEND_HOST: localhost:$FRONTEND_PORT
       KAFKA_BROKER: $KAFKA_BROKER
     ports:
-      # - "4000:4000"
+      # - 4000:4000
       - 8080:$GATEWAY_PORT
 
   auth-service:
@@ -67,14 +67,14 @@ services:
       SERVE_PORT: $AUTH_PORT
       FRONTEND_HOST: localhost:$DEFAULT_PORT
       POSTGRES_HOST: $POSTGRES_HOST
-  # ports:
-  #   - "4000:4000"
+    # ports:
+    #   - 4000:4000
 
   account-service:
     container_name: account-service
     build:
       context: ./backend
-      dockerfile: ./Dockerfile
+      dockerfile: ./Dockerfile.debug
       args:
         GO_VERSION: $GO_VERSION
         SERVICE_NAME: account-service
@@ -82,6 +82,8 @@ services:
       SERVE_PORT: $ACCOUNT_PORT
       KAFKA_BROKER: $KAFKA_BROKER
       POSTGRES_HOST: $POSTGRES_HOST
+    ports:
+      - 4000:4000
 
   payment-service:
     container_name: payment-service

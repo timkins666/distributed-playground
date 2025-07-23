@@ -23,7 +23,7 @@
             "host": "127.0.0.1",
             "substitutePath": [
                 {
-                    "from": "${workspaceFolder}/services/auth-service",
+                    "from": "${workspaceFolder}/backend",
                     "to": "/app" // Map the local workspace folder to the container path
                 }
             ]

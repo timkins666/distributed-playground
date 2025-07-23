@@ -2,43 +2,55 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"time"
 
 	"github.com/segmentio/kafka-go"
+	appdb "github.com/timkins666/distributed-playground/backend/pkg/appdb"
 	cmn "github.com/timkins666/distributed-playground/backend/pkg/common"
 	// TODO import "github.com/Masterminds/squirrel"
 )
 
+type app struct {
+	cancelCtx context.Context
+	db        *appdb.DB
+	txReader  *kafka.Reader
+	writer    *kafka.Writer
+	log       *log.Logger
+}
+
 func main() {
+	cancelCtx, stop := cmn.GetCancelContext()
+	defer stop()
+
 	reader := kafka.NewReader(kafka.ReaderConfig{
 		GroupID: "process-transaction",
 		Topic:   cmn.Topics.TransactionRequested(),
 	})
 	defer reader.Close()
+
 	writer := &kafka.Writer{
 		Addr:         kafka.TCP(cmn.KafkaBroker()),
 		RequiredAcks: 1,
 	}
 	defer writer.Close()
 
-	db, err := cmn.InitDB(10)
+	db, err := appdb.InitDB(appdb.DefaultConfig)
 	if err != nil {
 		log.Panicln(err.Error())
 	}
 
-	cancelCtx, stop := cmn.GetCancelContext()
-	defer stop()
+	app := app{
+		cancelCtx: cancelCtx,
+		db:        db,
+		txReader:  reader,
+		writer:    writer,
+		log:       cmn.AppLogger(),
+	}
 
-	go processTransaction(
-		db,
-		reader,
-		writer,
-		cancelCtx,
-	)
+	go processTransaction(app)
 
 	for {
 		select {
@@ -50,18 +62,13 @@ func main() {
 	}
 }
 
-func processTransaction(
-	db *sql.DB,
-	reader *kafka.Reader,
-	_ *kafka.Writer,
-	cancelCtx context.Context,
-) {
+func processTransaction(app app) {
 	// commit transaction to db
 
 	// TODO: failed messages
 
 	for {
-		msg, err := reader.ReadMessage(cancelCtx)
+		msg, err := app.txReader.ReadMessage(app.cancelCtx)
 		if err != nil {
 			log.Println(err)
 			continue
@@ -74,7 +81,7 @@ func processTransaction(
 			return
 		}
 
-		err = commitToDB(db, tx)
+		err = commitToDB(tx, app)
 		if err != nil {
 			log.Println("Error committing transaction, this is probably bad", err)
 			return
@@ -85,8 +92,8 @@ func processTransaction(
 	}
 }
 
-func commitToDB(db *sql.DB, transaction *cmn.Transaction) error {
-	tx, err := db.Begin()
+func commitToDB(transaction *cmn.Transaction, app app) error {
+	tx, err := app.db.Expose().Begin()
 	if err != nil {
 		return err
 	}

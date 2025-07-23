@@ -8,8 +8,8 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 
-COPY ./pkg/common/* ./pkg/common/
-COPY ./svc/${SERVICE_NAME}/* ./svc/${SERVICE_NAME}/
+COPY ./pkg/. ./pkg/
+COPY ./svc/${SERVICE_NAME}/. ./svc/${SERVICE_NAME}/
 
 WORKDIR /app/svc/${SERVICE_NAME}
 

@@ -1,10 +1,12 @@
 package common
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,23 +15,68 @@ import (
 
 var secretKey = []byte("super-secret-shh")
 
-func CreateUserToken(user *User) (string, error) {
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256,
-		jwt.MapClaims{
-			"username": user.Username,
-			"roles":    user.Roles,
-			"exp":      time.Now().Add(time.Hour * 24).Unix(),
-		})
+type ContextKey string
 
-	tokenString, err := token.SignedString(secretKey)
-	if err != nil {
-		return "", err
+const UserIDKey ContextKey = "userIDKey"
+const AppKey ContextKey = "app"
+
+// handlerfunc template
+func _(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// do stuff
+		next(w, r)
 	}
-
-	return tokenString, nil
 }
 
-func VerifyToken(r *http.Request) (*jwt.Token, error) {
+func SetUserIDMiddlewareHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if ok := setUserID(r); !ok {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func SetUserIDMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if ok := setUserID(r); !ok {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	}
+}
+
+func setUserID(r *http.Request) bool {
+	token, err := getToken(r)
+	if err != nil {
+		log.Println(err)
+		return false
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return false
+	}
+
+	idStr, err := claims.GetSubject()
+	if err != nil {
+		log.Println(err)
+		return false
+	}
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		log.Println(err)
+		return false
+	}
+
+	*r = *r.WithContext(context.WithValue(r.Context(), UserIDKey, id))
+	return true
+}
+
+func getToken(r *http.Request) (*jwt.Token, error) {
+	// Extract the Bearer token from Authorization header & check expiry
 	headerStr := r.Header.Get("Authorization")
 
 	if !strings.HasPrefix(headerStr, "Bearer ") {
@@ -44,51 +91,28 @@ func VerifyToken(r *http.Request) (*jwt.Token, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	if !token.Valid {
 		return nil, fmt.Errorf("invalid token")
 	}
 
+	//TODO: check expiry
+	iat, _ := token.Claims.GetIssuedAt()
+	log.Println("iat:", iat)
+
 	return token, nil
 }
 
-func GetUserFromClaims(r *http.Request) (User, error) {
-	token, err := VerifyToken(r)
+func CreateUserToken(user User) (string, error) {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256,
+		jwt.MapClaims{
+			"sub": strconv.Itoa(int(user.ID)),
+			"iat": time.Now().Unix(),
+		})
 
+	tokenString, err := token.SignedString(secretKey)
 	if err != nil {
-		log.Println("ERROR:", err)
-		return User{}, errors.New("Nope")
+		return "", err
 	}
 
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return User{}, errors.New("Nope")
-	}
-
-	// TODO: use json or something rather than first principals
-	var username string
-	claimUser, ok := claims["username"]
-	if ok {
-		username = claimUser.(string)
-	}
-
-	var roles []string
-	claimRoles, ok := claims["roles"]
-	if ok {
-		claimRoles, ok := claimRoles.([]any)
-		if ok {
-			for _, r := range claimRoles {
-				r, ok := r.(string)
-				if ok {
-					roles = append(roles, r)
-				}
-			}
-		}
-	}
-
-	user := User{
-		Username: username,
-		Roles:    roles,
-	}
-	return user, nil
+	return tokenString, nil
 }

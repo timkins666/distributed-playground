@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS accounts."user" (
 
 CREATE TABLE IF NOT EXISTS accounts.account (
     id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
     user_id INT NOT NULL REFERENCES accounts."user"(id),
     balance BIGINT NOT NULL DEFAULT 0
 );

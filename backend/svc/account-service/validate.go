@@ -4,9 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math/rand/v2"
-	"os"
 	"strings"
 	"time"
 
@@ -25,54 +23,39 @@ type paymentValidationResult struct {
 	timedOut       bool
 }
 
-func paymentValidator(cancelCtx context.Context) {
+func paymentValidator(app app) {
 	// handles validation of requested payments
-
-	// TODO: init kafkas in main
-	broker := os.Getenv("KAFKA_BROKER")
-	reader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers: []string{broker},
-		Topic:   cmn.Topics.PaymentRequested(),
-		GroupID: "payment-validator",
-	})
-	defer reader.Close()
-
-	writer := &kafka.Writer{
-		Addr:         kafka.TCP(broker),
-		RequiredAcks: 1,
-		MaxAttempts:  5,
-	}
 
 	max_errors := 10
 	for {
 		select {
-		case <-cancelCtx.Done():
-			log.Println("Context cancelled")
+		case <-app.cancelCtx.Done():
+			app.log.Println("Context cancelled")
 			return
 		default:
-			msg, err := reader.ReadMessage(context.Background())
+			msg, err := app.payReqReader.ReadMessage(context.Background())
 			if err != nil {
-				log.Println("READ MSG ERROR", err)
+				app.log.Println("READ MSG ERROR", err)
 				max_errors--
 				if max_errors == 0 {
-					log.Println("Max errors reached, something seems wrong...")
+					app.log.Println("Max errors reached, something seems wrong...")
 					break
 				}
 				continue
 			}
-			go handlePaymentRequestedMessage(msg, writer, cancelCtx)
+			go handlePaymentRequestedMessage(msg, app)
 		}
 	}
 }
 
-func handlePaymentRequestedMessage(message kafka.Message, writer *kafka.Writer, cancelCtx context.Context) {
+func handlePaymentRequestedMessage(message kafka.Message, app app) {
 	var req cmn.PaymentRequest
 	err := json.Unmarshal(message.Value, &req)
 	if err != nil {
-		log.Println("ERROR failed to parse message:", err)
+		app.log.Println("ERROR failed to parse message:", err)
 		return
 	}
-	log.Println("Read message: ", req)
+	app.log.Println("Read message: ", req)
 
 	validateResult := &paymentValidationResult{
 		paymentRequest: &req,
@@ -80,36 +63,36 @@ func handlePaymentRequestedMessage(message kafka.Message, writer *kafka.Writer, 
 
 	numChecks := 2 // being lazy
 	results := make(chan checkResult, numChecks)
-	go checkBalance(&req, results)
-	go checkTargetAccount(&req, results)
+	go checkBalance(&req, results, app)
+	go checkTargetAccount(&req, results, app)
 
 	for {
 		select {
 		case res := <-results:
 			// update central results here for single update point
-			log.Println(res.checkName, ":", res.result)
+			app.log.Println(res.checkName, ":", res.result)
 			validateResult.results = append(validateResult.results, res)
 
 			if len(validateResult.results) == numChecks {
-				log.Println("all checks complete for request", req.SystemID)
-				go handleResults(validateResult, writer, cancelCtx)
+				app.log.Println("all checks complete for request", req.SystemID)
+				go handleResults(validateResult, app)
 				return
 			}
-			log.Printf("waiting for %d remaining check for request %s", numChecks-len(validateResult.results), req.SystemID)
+			app.log.Printf("waiting for %d remaining check for request %s", numChecks-len(validateResult.results), req.SystemID)
 		case <-time.After(4500 * time.Millisecond): // 4.5s timeout to return so some will fail
-			log.Println("Checks timed out for request", req.SystemID)
+			app.log.Println("Checks timed out for request", req.SystemID)
 			validateResult.timedOut = true
-			go handleResults(validateResult, writer, cancelCtx)
+			go handleResults(validateResult, app)
 			return
-		case <-cancelCtx.Done():
+		case <-app.cancelCtx.Done():
 			return
 		}
 	}
 }
 
-func handleResults(result *paymentValidationResult, writer *kafka.Writer, cancelCtx context.Context) {
+func handleResults(result *paymentValidationResult, app app) {
 	if result.timedOut {
-		sendPaymentFailed(result.paymentRequest, "timeout", writer, cancelCtx)
+		sendPaymentFailed(result.paymentRequest, "timeout", app)
 		return
 	}
 
@@ -121,25 +104,23 @@ func handleResults(result *paymentValidationResult, writer *kafka.Writer, cancel
 	}
 
 	if len(errs) > 0 {
-		go sendPaymentFailed(result.paymentRequest, strings.Join(errs, ", "), writer, cancelCtx)
+		go sendPaymentFailed(result.paymentRequest, strings.Join(errs, ", "), app)
 		return
 	}
 
 	// TODO: lock funds to prevent races before submitting transaction
-	go initiateTransaction(result.paymentRequest, writer, cancelCtx)
+	go initiateTransaction(result.paymentRequest, app)
 }
 
-func sendPaymentFailed(req *cmn.PaymentRequest, reason string, _ *kafka.Writer, _ context.Context) {
+func sendPaymentFailed(req *cmn.PaymentRequest, reason string, app app) {
 	// TODO: send payment failed message for gateway (or future notification service)
-	log.Printf("Payment of £%d failed for account %d: %s", req.Amount, req.TargetAccountID, reason)
+	app.log.Printf("Payment of £%d failed for account %d: %s", req.Amount, req.TargetAccountID, reason)
 }
 
-func initiateTransaction(req *cmn.PaymentRequest, writer *kafka.Writer, cancelCtx context.Context) {
+func initiateTransaction(req *cmn.PaymentRequest, app app) {
 	// send message(s) for transaction service
 
-	// TODO: include both accounts for transfers within bank?
-
-	log.Printf("Initiate transaction of £%d from account %d to account %d", req.Amount, req.SourceAccountID, req.TargetAccountID)
+	app.log.Printf("Initiate transaction of £%d from account %d to account %d", req.Amount, req.SourceAccountID, req.TargetAccountID)
 
 	txOut, err1 := json.Marshal(cmn.Transaction{
 		TxID:      req.SystemID,
@@ -153,10 +134,10 @@ func initiateTransaction(req *cmn.PaymentRequest, writer *kafka.Writer, cancelCt
 	})
 
 	if err1 != nil || err2 != nil {
-		sendPaymentFailed(req, "processing error", writer, cancelCtx)
+		sendPaymentFailed(req, "processing error", app)
 	}
 
-	err := writer.WriteMessages(cancelCtx,
+	err := app.writer.WriteMessages(app.cancelCtx,
 		kafka.Message{
 			Topic: cmn.Topics.TransactionRequested(),
 			Value: txOut,
@@ -167,52 +148,53 @@ func initiateTransaction(req *cmn.PaymentRequest, writer *kafka.Writer, cancelCt
 		})
 
 	if err != nil {
-		sendPaymentFailed(req, "failed to initiate transaction", writer, cancelCtx)
+		sendPaymentFailed(req, "failed to initiate transaction", app)
 	}
 
 }
 
-func checkBalance(req *cmn.PaymentRequest, chn chan<- checkResult) {
+func checkBalance(req *cmn.PaymentRequest, chn chan<- checkResult, app app) {
 	// check source account has required funds
 	checkName := "balance"
 
 	// artificial delay
 	sleep := rand.N(5000)
-	log.Printf("%s sleeping for %d", checkName, sleep)
+	app.log.Printf("%s sleeping for %d", checkName, sleep)
 	time.Sleep(time.Duration(sleep) * time.Millisecond)
 
 	result := checkResult{checkName: checkName}
 
-	srcAcc := getAccountByID(req.SourceAccountID, nil)
+	srcAcc, err := app.db.GetAccountByID(req.SourceAccountID)
 
-	if srcAcc == nil {
-		log.Printf("ERROR: Account id %d not found", req.SourceAccountID)
+	if err != nil {
+		app.log.Printf("ERROR: Account id %d not found. %s", req.SourceAccountID, err)
 		result.result = false // TODO: unneccessary cos default but wait for tests
 		chn <- result
 		return
 	}
 
-	log.Printf("Account %d current balance £%d, requested payment of £%d", srcAcc.AccountID, srcAcc.Balance, req.Amount)
+	app.log.Printf("Account %d current balance £%d, requested payment of £%d", srcAcc.AccountID, srcAcc.Balance, req.Amount)
 	result.result = srcAcc.Balance >= req.Amount
 	chn <- result
 }
 
-func checkTargetAccount(req *cmn.PaymentRequest, chn chan<- checkResult) {
-	// check target account is valid
+func checkTargetAccount(req *cmn.PaymentRequest, chn chan<- checkResult, app app) {
+	// check target account exists
+
 	checkName := "targetAccount"
 
 	// artificial delay
 	sleep := rand.N(5000)
-	log.Printf("%s sleeping for %d", checkName, sleep)
+	app.log.Printf("%s sleeping for %d", checkName, sleep)
 	time.Sleep(time.Duration(sleep) * time.Millisecond)
 
 	result := checkResult{checkName: checkName}
 
-	tgtAcc := getAccountByID(req.SourceAccountID, nil)
+	_, err := app.db.GetAccountByID(req.SourceAccountID)
 
-	if tgtAcc == nil {
-		log.Printf("ERROR: Target account id %d not found", req.TargetAccountID)
-		result.result = false
+	if err != nil {
+		app.log.Printf("ERROR: Target account id %d not found. %s", req.TargetAccountID, err)
+		result.result = false // TODO: unneccessary cos default but wait for tests
 		chn <- result
 		return
 	}

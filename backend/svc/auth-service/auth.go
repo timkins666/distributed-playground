@@ -1,20 +1,91 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"log"
 	"net/http"
 	"os"
-	"slices"
 	"strings"
+	"time"
 
-	"github.com/lib/pq"
+	"github.com/timkins666/distributed-playground/backend/pkg/appdb"
 	cmn "github.com/timkins666/distributed-playground/backend/pkg/common"
 )
 
-func createUser(username string, db *sql.DB) *cmn.User {
+type app struct {
+	cancelCtx context.Context
+	db        *appdb.DB
+	log       *log.Logger
+}
+
+func main() {
+	cancelCtx, stop := cmn.GetCancelContext()
+	defer stop()
+
+	log.Println("sleep for debug connect time")
+	time.Sleep(10 * time.Second)
+
+	db, err := appdb.InitDB(appdb.DefaultConfig)
+
+	if err != nil || db == nil {
+		log.Panicln("Failed to initialise pstgres")
+	}
+
+	app := app{
+		cancelCtx: cancelCtx,
+		db:        db,
+		log:       cmn.AppLogger(),
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/login", loginHandler)
+	// mux.HandleFunc("/admin", adminHandler)
+
+	port := ":" + os.Getenv("SERVE_PORT")
+	log.Printf("Auth service running on %s", port)
+	log.Fatal(http.ListenAndServe(port,
+		cmn.SetContextValuesMiddleware(
+			map[cmn.ContextKey]any{cmn.AppKey: app})(mux)))
+}
+
+func loginHandler(w http.ResponseWriter, r *http.Request) {
+	app, _ := r.Context().Value(cmn.AppKey).(app)
+
+	var req cmn.LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+
+	if strings.ToLower(req.Username[0:1]) == "x" {
+		log.Println("x users not allowed")
+		http.Error(w, "no x users", http.StatusUnauthorized)
+		return
+	}
+
+	user, err := getOrCreateUser(req.Username, app)
+
+	if err != nil {
+		log.Println("Failed creating user :p")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	token, err := cmn.CreateUserToken(user)
+	if err != nil {
+		log.Println("Error creating token: ", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]any{"username": user.Username, "roles": user.Roles, "token": token})
+}
+
+func createUser(username string, app app) (cmn.User, error) {
 	// create new user
 	// any username beginning with s or S will be a customer and an admin.
 	// admin user will be admin only.
@@ -36,106 +107,49 @@ func createUser(username string, db *sql.DB) *cmn.User {
 	}
 
 	log.Printf("Creating user %+v", user)
-	err := db.QueryRow(`
-	INSERT INTO accounts."user" (username, roles) VALUES ($1, $2) RETURNING id
-	`, user.Username, pq.Array(user.Roles)).Scan(&user.ID)
+	err := app.db.CreateUser(&user)
 
 	if err != nil {
-		log.Println("ERROR CREATING USER: ", err)
-		return nil
+		return cmn.User{}, err
+	}
+	if user.ID <= 0 {
+		return cmn.User{}, errors.New("user not saved correctly")
 	}
 
-	log.Printf("Creating user with id %d", user.ID)
-	return &user
+	log.Printf("Created user with id %d", user.ID)
+	return user, nil
 }
 
-func getOrCreateUser(username string, db *sql.DB) *cmn.User {
+func getOrCreateUser(username string, app app) (cmn.User, error) {
 	// fakes getting existing user info. don't care about passwords, that's not why we're here.
-
-	log.Printf("Try load user %s from db...", username)
-	var user cmn.User
-	err := db.QueryRow(`
-		SELECT id, username, roles FROM accounts."user" WHERE username = $1
-	`, username).Scan(&user.ID, &user.Username, pq.Array(&user.Roles))
-
-	if user.ID > 0 {
-		log.Printf("User found %+v", user)
-		return &user
+	user, err := app.db.LoadUserByName(username)
+	if err == nil {
+		return user, nil
 	}
 
-	log.Println("User not found")
 	if err == sql.ErrNoRows {
-		return createUser(username, db)
+		log.Println("User not found, creating")
+		return createUser(username, app)
 	}
 
-	log.Println("ERROR: ", err)
-	return nil
+	return user, err
 }
 
-func loginHandler(db *sql.DB) func(http.ResponseWriter, *http.Request) {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var req cmn.LoginRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request", http.StatusBadRequest)
-			return
-		}
+func adminHandler(w http.ResponseWriter, _ *http.Request) {
+	// // for testing tokens, will go away soon
+	// user, err := cmn.GetUserFromToken(r)
+	// if err != nil || !user.Valid() {
+	// 	w.WriteHeader(http.StatusUnauthorized)
+	// 	fmt.Println(w, "Nope")
+	// 	return
+	// }
 
-		if strings.ToLower(req.Username[0:1]) == "x" {
-			log.Println("x users not allowed")
-			http.Error(w, "no x users", http.StatusUnauthorized)
-			return
-		}
-
-		user := getOrCreateUser(req.Username, db)
-
-		if user == nil {
-			log.Println("Failed creating user :p")
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		token, err := cmn.CreateUserToken(user)
-		if err != nil {
-			log.Println("Error creating token: ", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]any{"username": user.Username, "roles": user.Roles, "token": token})
-	}
-}
-
-func adminHandler(w http.ResponseWriter, r *http.Request) {
-	// for testing tokens, will go away soon
-	user, err := cmn.GetUserFromClaims(r)
-	if err != nil || !user.Valid() {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Println(w, "Nope")
-		return
-	}
-
-	if !slices.Contains(user.Roles, "admin") {
-		log.Printf("User %s does not have admin role (has %s)", user.Username, user.Roles)
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Println(w, "Not admin")
-		return
-	}
+	// if !slices.Contains(user.Roles, "admin") {
+	// 	log.Printf("User %s does not have admin role (has %s)", user.Username, user.Roles)
+	// 	w.WriteHeader(http.StatusUnauthorized)
+	// 	fmt.Println(w, "Not admin")
+	// 	return
+	// }
 
 	w.WriteHeader(http.StatusOK)
-}
-
-func main() {
-	db, err := cmn.InitDB(10)
-	if err != nil {
-		log.Panicf("Couldn't connect to db: %s", err)
-	}
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/login", loginHandler(db))
-	mux.HandleFunc("/admin", adminHandler)
-
-	port := ":" + os.Getenv("SERVE_PORT")
-	log.Printf("Auth service running on %s", port)
-	log.Fatal(http.ListenAndServe(port, mux))
 }

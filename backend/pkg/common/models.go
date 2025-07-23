@@ -12,21 +12,21 @@ type LoginRequest struct {
 }
 
 type User struct {
-	ID       int32    `json:"id"`
+	ID       int      `json:"id"`
 	Username string   `json:"username"`
 	Roles    []string `json:"roles"`
 }
 
 func (u *User) Valid() bool {
-	return len(u.Username) > 0 && len(u.Roles) > 0
+	return u != nil && u.Username != "" && len(u.Roles) > 0
 }
 
 type PaymentRequest struct {
 	AppID           string    `json:"appId"`
 	SystemID        string    `json:"systemId,omitempty"`
 	Amount          int64     `json:"amount"`
-	SourceAccountID int32     `json:"sourceAccountId"`
-	TargetAccountID int32     `json:"targetAccountId"`
+	SourceAccountID int       `json:"sourceAccountId"`
+	TargetAccountID int       `json:"targetAccountId"`
 	Timestamp       time.Time `json:"timestamp"`
 }
 
@@ -44,5 +44,19 @@ func (pr *PaymentRequest) Valid() bool {
 type Transaction struct {
 	TxID      string
 	Amount    int64
-	AccountID int32
+	AccountID int
+}
+
+type Account struct {
+	AccountID int    `json:"accountId"`
+	Name      string `json:"name"`
+	UserID    int    `json:"userId"`
+	Balance   int64  `json:"balance"`
+	BankID    int    `json:"bankId"`
+	BankName  string `json:"bankName"`
+}
+
+type Bank struct {
+	Name string `json:"name"`
+	ID   int    `json:"id"`
 }

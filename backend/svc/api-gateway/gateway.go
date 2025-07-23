@@ -4,6 +4,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+
+	cmn "github.com/timkins666/distributed-playground/backend/pkg/common"
 )
 
 var proxyHosts map[string]string = map[string]string{
@@ -17,7 +19,7 @@ func main() {
 	mux.HandleFunc("/login", loginHandler)
 
 	for srv := range proxyHosts {
-		mux.HandleFunc("/"+srv+"/", withAuth(proxyToService))
+		mux.HandleFunc("/"+srv+"/", cmn.SetUserIDMiddleware(proxyToService))
 	}
 
 	port := ":" + os.Getenv("SERVE_PORT")
