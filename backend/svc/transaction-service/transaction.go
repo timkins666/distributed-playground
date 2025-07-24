@@ -8,14 +8,13 @@ import (
 	"time"
 
 	"github.com/segmentio/kafka-go"
-	appdb "github.com/timkins666/distributed-playground/backend/pkg/appdb"
 	cmn "github.com/timkins666/distributed-playground/backend/pkg/common"
 	// TODO import "github.com/Masterminds/squirrel"
 )
 
 type app struct {
 	cancelCtx context.Context
-	db        *appdb.DB
+	db        *cmn.DB
 	txReader  *kafka.Reader
 	writer    *kafka.Writer
 	log       *log.Logger
@@ -37,7 +36,7 @@ func main() {
 	}
 	defer writer.Close()
 
-	db, err := appdb.InitDB(appdb.DefaultConfig)
+	db, err := cmn.InitDB(cmn.DefaultConfig)
 	if err != nil {
 		log.Panicln(err.Error())
 	}

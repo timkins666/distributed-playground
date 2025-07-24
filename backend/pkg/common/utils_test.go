@@ -1,26 +1,12 @@
 package common
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/bmizerany/assert"
 )
-
-func SetContextValuesMiddleware2(kv map[ContextKey]any) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := r.Context()
-			for k, v := range kv {
-				ctx = context.WithValue(ctx, k, v)
-			}
-			*r = *r.WithContext(ctx)
-			next.ServeHTTP(w, r)
-		})
-	}
-}
 
 func TestSetContextValuesMiddleware(t *testing.T) {
 	key1 := ContextKey("userID")

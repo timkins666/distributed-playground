@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -12,7 +11,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/segmentio/kafka-go"
-	"github.com/timkins666/distributed-playground/backend/pkg/appdb"
 	cmn "github.com/timkins666/distributed-playground/backend/pkg/common"
 )
 
@@ -20,28 +18,19 @@ var (
 	banks []*cmn.Bank = []*cmn.Bank{{Name: "Bonzo", ID: 1}} // tmp
 )
 
-type app struct {
-	cancelCtx    context.Context
-	db           *appdb.DB
-	payReqReader *kafka.Reader
-	writer       *kafka.Writer
-	log          *log.Logger
-}
-
 func main() {
 	kafkaBroker := cmn.KafkaBroker()
 
 	cancelCtx, stop := cmn.GetCancelContext()
 	defer stop()
 
-	db, err := appdb.InitDB(appdb.DefaultConfig)
+	db, err := cmn.InitDB(cmn.DefaultConfig)
 	if err != nil {
-		log.Panicln("Failed to initialise pstgres")
+		log.Panicln("Failed to initialise postgres")
 	}
 
-	app := app{
-		cancelCtx: cancelCtx,
-		log:       cmn.AppLogger(),
+	env := appEnv{
+		BaseEnv: cmn.BaseEnv{}.WithCancelCtx(cancelCtx).WithDB(db),
 		payReqReader: kafka.NewReader(kafka.ReaderConfig{
 			Brokers: []string{kafkaBroker},
 			Topic:   cmn.Topics.PaymentRequested(),
@@ -52,29 +41,28 @@ func main() {
 			RequiredAcks: 1,
 			MaxAttempts:  5,
 		},
-		db: db,
 	}
 
-	defer app.payReqReader.Close()
-	defer app.writer.Close()
+	defer env.payReqReader.Close()
+	defer env.writer.Close()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/banks", getAllBanksHandler)
 	mux.HandleFunc("/myaccounts", getUserAccountsHandler)
 	mux.HandleFunc("/new", createUserAccountHandler)
 
-	go paymentValidator(app)
+	go paymentValidator(env)
 
 	port := ":" + os.Getenv("SERVE_PORT")
-	app.log.Printf("Accounts service running on %s", port)
+	env.Logger().Printf("Accounts service running on %s", port)
 	log.Fatal(http.ListenAndServe(port,
 		cmn.SetUserIDMiddlewareHandler(
 			cmn.SetContextValuesMiddleware(
-				map[cmn.ContextKey]any{cmn.AppKey: app})(mux))))
+				map[cmn.ContextKey]any{cmn.AppKey: env})(mux))))
 }
 
 func getAllBanksHandler(w http.ResponseWriter, r *http.Request) {
-	app, _ := r.Context().Value(cmn.AppKey).(app)
+	env, _ := r.Context().Value(cmn.AppKey).(appEnv)
 	userID, ok := r.Context().Value(cmn.UserIDKey).(int)
 
 	if userID == 0 || !ok {
@@ -83,19 +71,19 @@ func getAllBanksHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := app.db.LoadUserByID(userID)
+	user, err := env.DB().LoadUserByID(userID)
 	if err != nil || !user.Valid() {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Println(w, "Nope")
 	}
 
-	app.log.Printf("getallbanks user %s", user.Username)
+	env.Logger().Printf("getallbanks user %s", user.Username)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(banks)
 }
 
 func getUserAccountsHandler(w http.ResponseWriter, r *http.Request) {
-	app, _ := r.Context().Value(cmn.AppKey).(app)
+	env, _ := r.Context().Value(cmn.AppKey).(appEnv)
 	userID, _ := r.Context().Value(cmn.UserIDKey).(int)
 
 	if userID == 0 {
@@ -104,13 +92,13 @@ func getUserAccountsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accs, err := app.db.GetUserAccounts(userID)
+	accs, err := env.DB().GetUserAccounts(userID)
 
 	if err == nil || err == sql.ErrNoRows {
 		if len(accs) == 0 {
 			accs = []cmn.Account{}
 		}
-		app.log.Printf("Accs: %+v", accs)
+		env.Logger().Printf("Accs: %+v", accs)
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(accs)
 		return
@@ -127,7 +115,7 @@ type newAccountRequest struct {
 }
 
 func createUserAccountHandler(w http.ResponseWriter, r *http.Request) {
-	app, _ := r.Context().Value(cmn.AppKey).(app)
+	env, _ := r.Context().Value(cmn.AppKey).(appEnv)
 	userID, _ := r.Context().Value(cmn.UserIDKey).(int)
 
 	var req *newAccountRequest
@@ -138,7 +126,7 @@ func createUserAccountHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var sourceAcc *cmn.Account
-	userAccounts, err := app.db.GetUserAccounts(userID)
+	userAccounts, err := env.DB().GetUserAccounts(userID)
 	if err != nil {
 		// TODO: handle err
 	}
@@ -151,10 +139,10 @@ func createUserAccountHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		sourceAcc, err = app.db.GetAccountByID(req.SourceFundsAccountID)
+		sourceAcc, err = env.DB().GetAccountByID(req.SourceFundsAccountID)
 		if sourceAcc == nil {
-			app.log.Printf(
-				"Account %d not found. Doesn't exist or not owned by user %s",
+			env.Logger().Printf(
+				"Account %d not found. Doesn't exist or not owned by user %d",
 				req.SourceFundsAccountID,
 				userID,
 			)
@@ -182,8 +170,8 @@ func createUserAccountHandler(w http.ResponseWriter, r *http.Request) {
 		BankName: banks[0].Name,
 	}
 
-	if accID, err := app.db.CreateAccount(newAccount); err != nil || accID <= 0 {
-		app.log.Println("ERROR: ", err)
+	if accID, err := env.DB().CreateAccount(newAccount); err != nil || accID <= 0 {
+		env.Logger().Println("ERROR: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Println(w, "Error creating account")
 		return
@@ -191,7 +179,7 @@ func createUserAccountHandler(w http.ResponseWriter, r *http.Request) {
 		newAccount.AccountID = accID
 	}
 
-	app.log.Println("Opened new account", newAccount)
+	env.Logger().Println("Opened new account", newAccount)
 
 	respAccounts := []cmn.Account{newAccount}
 
@@ -200,7 +188,7 @@ func createUserAccountHandler(w http.ResponseWriter, r *http.Request) {
 		Amount:    newAccount.Balance,
 		AccountID: newAccount.AccountID,
 	})
-	app.writer.WriteMessages(app.cancelCtx,
+	env.Writer().WriteMessages(env.CancelCtx(),
 		kafka.Message{
 			Topic: cmn.Topics.TransactionRequested(),
 			Value: txJson,
@@ -212,7 +200,7 @@ func createUserAccountHandler(w http.ResponseWriter, r *http.Request) {
 			Amount:    -newAccount.Balance,
 			AccountID: req.SourceFundsAccountID,
 		})
-		app.writer.WriteMessages(app.cancelCtx,
+		env.Writer().WriteMessages(env.CancelCtx(),
 			kafka.Message{
 				Topic: cmn.Topics.TransactionRequested(),
 				Value: txJson,

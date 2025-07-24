@@ -1,4 +1,4 @@
-package appdb
+package common
 
 import (
 	"database/sql"
@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/lib/pq"
-	cmn "github.com/timkins666/distributed-playground/backend/pkg/common"
 )
 
 type DBConfig struct {
@@ -19,7 +18,7 @@ type DBConfig struct {
 	ConnectTimeout int
 }
 
-func (c *DBConfig) ConnectionString() string {
+func (c DBConfig) ConnectionString() string {
 	return fmt.Sprintf(
 		"postgres://%s:%s@%s/%s?sslmode=disable",
 		c.User,
@@ -37,7 +36,7 @@ var DefaultConfig DBConfig = DBConfig{
 	ConnectTimeout: 10,
 }
 
-func InitDB(conf DBConfig) (*DB, error) {
+func InitDB(conf DBConfig) (DBAll, error) {
 	// Initialise Postgres connection
 
 	connStr := conf.ConnectionString()
@@ -74,6 +73,16 @@ func InitDB(conf DBConfig) (*DB, error) {
 	return nil, err
 }
 
+type DBAll interface {
+	Expose() *sql.DB
+	CreateUser(*User) (int, error)
+	LoadUserByName(string) (User, error)
+	LoadUserByID(int) (User, error)
+	GetUserAccounts(int) ([]Account, error)
+	CreateAccount(Account) (int, error)
+	GetAccountByID(int) (*Account, error)
+}
+
 type DB struct {
 	db *sql.DB
 }
@@ -83,43 +92,45 @@ func (db *DB) Expose() *sql.DB {
 	return db.db
 }
 
-func (db *DB) CreateUser(user *cmn.User) error {
-	// Creates the user in the db. User.ID will be populated in the struct.
-	return db.db.QueryRow(`
+func (db *DB) CreateUser(user *User) (int, error) {
+	// Creates the user in the db, returning the new user id
+	userID := 0
+	err := db.db.QueryRow(`
 		INSERT INTO accounts."user" (username, roles) VALUES ($1, $2) RETURNING id
-	`, user.Username, pq.Array(user.Roles)).Scan(&user.ID)
+	`, user.Username, pq.Array(user.Roles)).Scan(&userID)
+	return userID, err
 }
 
-func (db *DB) LoadUserByName(username string) (cmn.User, error) {
+func (db *DB) LoadUserByName(username string) (User, error) {
 	// load user by name from db.
 	// searches case insensitively, returns userame casing as in db
 
 	log.Printf("Try load user %s from db...", username)
 	log.Printf("db is %+v", db)
 	log.Printf("db.db is %+v", db.db)
-	var user cmn.User
+	var user User
 	err := db.db.QueryRow(`
 		SELECT id, username, roles FROM accounts."user" WHERE LOWER(username) = LOWER($1)
 	`, username).Scan(&user.ID, &user.Username, pq.Array(&user.Roles))
 	return user, err
 }
 
-func (db *DB) LoadUserByID(userID int) (cmn.User, error) {
+func (db *DB) LoadUserByID(userID int) (User, error) {
 	log.Printf("Try load user if %d from db...", userID)
-	var user cmn.User
+	var user User
 	err := db.db.QueryRow(`
 		SELECT id, username, roles FROM accounts."user" WHERE id = $1
 	`, userID).Scan(&user.ID, &user.Username, pq.Array(&user.Roles))
 	return user, err
 }
 
-func (db *DB) GetUserAccounts(userID int) ([]cmn.Account, error) {
+func (db *DB) GetUserAccounts(userID int) ([]Account, error) {
 	// get accounts from the user from db
 
 	// TODO: redis
 	// TOFO: squirrel / sqlx
 
-	var accounts []cmn.Account
+	var accounts []Account
 
 	rows, err := db.db.Query(`
 		SELECT id, user_id, balance FROM accounts.account WHERE user_id = $1
@@ -130,7 +141,7 @@ func (db *DB) GetUserAccounts(userID int) ([]cmn.Account, error) {
 	defer rows.Close()
 
 	for rows.Next() {
-		var acc cmn.Account
+		var acc Account
 		err := rows.Scan(&acc.AccountID, &acc.UserID, &acc.Balance)
 		if err != nil {
 			return nil, err
@@ -145,13 +156,13 @@ func (db *DB) GetUserAccounts(userID int) ([]cmn.Account, error) {
 	return accounts, nil
 }
 
-func (db *DB) GetAccountByID(accountID int) (*cmn.Account, error) {
+func (db *DB) GetAccountByID(accountID int) (*Account, error) {
 	// get account matching id.
 
 	// TODO: redis
 	// TOFO: squirrel / sqlx
 
-	acc := cmn.Account{}
+	acc := Account{}
 
 	err := db.db.QueryRow(`
 		SELECT id, user_id, balance from accounts.account WHERE id = $1
@@ -162,7 +173,7 @@ func (db *DB) GetAccountByID(accountID int) (*cmn.Account, error) {
 	return &acc, nil
 }
 
-func (db *DB) CreateAccount(a cmn.Account) (int, error) {
+func (db *DB) CreateAccount(a Account) (int, error) {
 	var newAccID int
 	err := db.db.QueryRow(`
 		INSERT INTO accounts.account (user_id, name)

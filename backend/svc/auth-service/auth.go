@@ -11,13 +11,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/timkins666/distributed-playground/backend/pkg/appdb"
 	cmn "github.com/timkins666/distributed-playground/backend/pkg/common"
 )
 
 type app struct {
 	cancelCtx context.Context
-	db        *appdb.DB
+	db        *cmn.DB
 	log       *log.Logger
 }
 
@@ -28,10 +27,10 @@ func main() {
 	log.Println("sleep for debug connect time")
 	time.Sleep(10 * time.Second)
 
-	db, err := appdb.InitDB(appdb.DefaultConfig)
+	db, err := cmn.InitDB(cmn.DefaultConfig)
 
 	if err != nil || db == nil {
-		log.Panicln("Failed to initialise pstgres")
+		log.Panicln("Failed to initialise postgres")
 	}
 
 	app := app{

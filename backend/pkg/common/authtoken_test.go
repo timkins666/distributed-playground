@@ -11,7 +11,6 @@ import (
 )
 
 func TestGetToken(t *testing.T) {
-
 	tests := []func() (string, *http.Request, *jwt.Token, error){
 		func() (string, *http.Request, *jwt.Token, error) {
 			name := "error when no auth header present"
