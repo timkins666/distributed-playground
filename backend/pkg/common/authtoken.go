@@ -3,7 +3,6 @@ package common
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -20,13 +19,14 @@ type ContextKey string
 const UserIDKey ContextKey = "userIDKey"
 const AppKey ContextKey = "app"
 
-// handlerfunc template
-func _(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// do stuff
-		next(w, r)
-	}
-}
+const authHeader string = "Authorization"
+const authHeaderPrefix string = "Bearer "
+
+var (
+	errInvalidAuthHeader = errors.New("invalid auth header")
+	errInvalidToken      = errors.New("invalid auth token")
+	errTokenParse        = errors.New("could not parse token")
+)
 
 func SetUserIDMiddlewareHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -77,22 +77,18 @@ func setUserID(r *http.Request) bool {
 
 func getToken(r *http.Request) (*jwt.Token, error) {
 	// Extract the Bearer token from Authorization header & check expiry
-	headerStr := r.Header.Get("Authorization")
+	headerStr := r.Header.Get(authHeader)
 
-	if !strings.HasPrefix(headerStr, "Bearer ") {
-		return nil, errors.New("invalid header")
+	if !strings.HasPrefix(headerStr, authHeaderPrefix) {
+		return nil, errInvalidAuthHeader
 	}
-	headerStr = strings.TrimPrefix(headerStr, "Bearer ")
-
-	token, err := jwt.Parse(headerStr, func(token *jwt.Token) (any, error) {
-		return secretKey, nil
-	})
-
+	headerStr = strings.TrimPrefix(headerStr, authHeaderPrefix)
+	token, err := parseToken(headerStr)
 	if err != nil {
-		return nil, err
+		return nil, errTokenParse
 	}
 	if !token.Valid {
-		return nil, fmt.Errorf("invalid token")
+		return nil, errInvalidToken
 	}
 
 	//TODO: check expiry
@@ -100,6 +96,13 @@ func getToken(r *http.Request) (*jwt.Token, error) {
 	log.Println("iat:", iat)
 
 	return token, nil
+}
+
+func parseToken(tokenStr string) (*jwt.Token, error) {
+	// todo: see Parse doc
+	return jwt.Parse(tokenStr, func(token *jwt.Token) (any, error) {
+		return secretKey, nil
+	})
 }
 
 func CreateUserToken(user User) (string, error) {
