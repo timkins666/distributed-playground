@@ -42,9 +42,10 @@ func (pr *PaymentRequest) Valid() bool {
 }
 
 type Transaction struct {
-	TxID      string
-	Amount    int64
-	AccountID int
+	TxID         string
+	PaymentSysID string
+	Amount       int64
+	AccountID    int
 }
 
 type Account struct {

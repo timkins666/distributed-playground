@@ -33,7 +33,7 @@ func main() {
 		BaseEnv: cmn.BaseEnv{}.WithCancelCtx(cancelCtx).WithDB(db),
 		payReqReader: kafka.NewReader(kafka.ReaderConfig{
 			Brokers: []string{kafkaBroker},
-			Topic:   cmn.Topics.PaymentRequested(),
+			Topic:   cmn.Topics.PaymentRequested().S(),
 			GroupID: "payment-validator",
 		}),
 		writer: &kafka.Writer{
@@ -190,7 +190,7 @@ func createUserAccountHandler(w http.ResponseWriter, r *http.Request) {
 	})
 	env.Writer().WriteMessages(env.CancelCtx(),
 		kafka.Message{
-			Topic: cmn.Topics.TransactionRequested(),
+			Topic: cmn.Topics.TransactionRequested().S(),
 			Value: txJson,
 		})
 
@@ -202,7 +202,7 @@ func createUserAccountHandler(w http.ResponseWriter, r *http.Request) {
 		})
 		env.Writer().WriteMessages(env.CancelCtx(),
 			kafka.Message{
-				Topic: cmn.Topics.TransactionRequested(),
+				Topic: cmn.Topics.TransactionRequested().S(),
 				Value: txJson,
 			})
 		sourceAcc.Balance -= req.InitialBalance

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -14,10 +13,8 @@ import (
 	cmn "github.com/timkins666/distributed-playground/backend/pkg/common"
 )
 
-type app struct {
-	cancelCtx context.Context
-	db        *cmn.DB
-	log       *log.Logger
+type env struct {
+	cmn.BaseEnv
 }
 
 func main() {
@@ -33,10 +30,8 @@ func main() {
 		log.Panicln("Failed to initialise postgres")
 	}
 
-	app := app{
-		cancelCtx: cancelCtx,
-		db:        db,
-		log:       cmn.AppLogger(),
+	app := env{
+		BaseEnv: cmn.BaseEnv{}.WithCancelCtx(cancelCtx).WithDB(db),
 	}
 
 	mux := http.NewServeMux()
@@ -51,7 +46,7 @@ func main() {
 }
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
-	app, _ := r.Context().Value(cmn.AppKey).(app)
+	app, _ := r.Context().Value(cmn.AppKey).(env)
 
 	var req cmn.LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -84,7 +79,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"username": user.Username, "roles": user.Roles, "token": token})
 }
 
-func createUser(username string, app app) (cmn.User, error) {
+func createUser(username string, app env) (cmn.User, error) {
 	// create new user
 	// any username beginning with s or S will be a customer and an admin.
 	// admin user will be admin only.
@@ -106,22 +101,23 @@ func createUser(username string, app app) (cmn.User, error) {
 	}
 
 	log.Printf("Creating user %+v", user)
-	err := app.db.CreateUser(&user)
+	newId, err := app.DB().CreateUser(&user)
 
 	if err != nil {
 		return cmn.User{}, err
 	}
-	if user.ID <= 0 {
+	if newId <= 0 {
 		return cmn.User{}, errors.New("user not saved correctly")
 	}
 
+	user.ID = newId
 	log.Printf("Created user with id %d", user.ID)
 	return user, nil
 }
 
-func getOrCreateUser(username string, app app) (cmn.User, error) {
+func getOrCreateUser(username string, app env) (cmn.User, error) {
 	// fakes getting existing user info. don't care about passwords, that's not why we're here.
-	user, err := app.db.LoadUserByName(username)
+	user, err := app.DB().LoadUserByName(username)
 	if err == nil {
 		return user, nil
 	}
@@ -134,21 +130,21 @@ func getOrCreateUser(username string, app app) (cmn.User, error) {
 	return user, err
 }
 
-func adminHandler(w http.ResponseWriter, _ *http.Request) {
-	// // for testing tokens, will go away soon
-	// user, err := cmn.GetUserFromToken(r)
-	// if err != nil || !user.Valid() {
-	// 	w.WriteHeader(http.StatusUnauthorized)
-	// 	fmt.Println(w, "Nope")
-	// 	return
-	// }
+// // for testing tokens, will go away soon
+// func adminHandler(w http.ResponseWriter, _ *http.Request) {
+// 	user, err := cmn.GetUserFromToken(r)
+// 	if err != nil || !user.Valid() {
+// 		w.WriteHeader(http.StatusUnauthorized)
+// 		fmt.Println(w, "Nope")
+// 		return
+// 	}
 
-	// if !slices.Contains(user.Roles, "admin") {
-	// 	log.Printf("User %s does not have admin role (has %s)", user.Username, user.Roles)
-	// 	w.WriteHeader(http.StatusUnauthorized)
-	// 	fmt.Println(w, "Not admin")
-	// 	return
-	// }
+// 	if !slices.Contains(user.Roles, "admin") {
+// 		log.Printf("User %s does not have admin role (has %s)", user.Username, user.Roles)
+// 		w.WriteHeader(http.StatusUnauthorized)
+// 		fmt.Println(w, "Not admin")
+// 		return
+// 	}
 
-	w.WriteHeader(http.StatusOK)
-}
+// 	w.WriteHeader(http.StatusOK)
+// }

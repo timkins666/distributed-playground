@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"math/rand/v2"
@@ -12,8 +15,21 @@ import (
 	cmn "github.com/timkins666/distributed-playground/backend/pkg/common"
 )
 
+type checkName string
+
+var (
+	balanceCheck  checkName = "balanceCheck"
+	targetAccount checkName = "targetAccount"
+)
+
+type paymentMsgType string
+
+var (
+	paymentFailed paymentMsgType = "paymentFailed"
+)
+
 type checkResult struct {
-	checkName string
+	checkName checkName
 	result    bool
 }
 
@@ -21,6 +37,37 @@ type paymentValidationResult struct {
 	paymentRequest *cmn.PaymentRequest
 	results        []checkResult
 	timedOut       bool
+}
+
+type paymentMsg struct {
+	Type      paymentMsgType
+	Reason    string
+	AppID     string
+	SystemID  string
+	AccountID int32
+}
+
+func (pm *paymentMsg) FromReq(req *cmn.PaymentRequest) *paymentMsg {
+	pm.AccountID = int32(req.SourceAccountID)
+	pm.AppID = req.AppID
+	pm.SystemID = req.SystemID
+	return pm
+}
+func (pm paymentMsg) FromBytes(b []byte) (*paymentMsg, error) {
+	buf := new(bytes.Buffer)
+	buf.Write(b)
+	err := gob.NewDecoder(buf).Decode(&pm)
+	return &pm, err
+}
+func (pm *paymentMsg) Key() ([]byte, error) {
+	buf := new(bytes.Buffer)
+	err := binary.Write(buf, binary.LittleEndian, pm.AccountID)
+	return buf.Bytes(), err
+}
+func (pm *paymentMsg) Value() ([]byte, error) {
+	buf := new(bytes.Buffer)
+	err := gob.NewEncoder(buf).Encode(pm)
+	return buf.Bytes(), err
 }
 
 // handles validation of requested payments
@@ -103,39 +150,52 @@ func handleResults(result *paymentValidationResult, env appEnv) {
 	}
 
 	if len(errs) > 0 {
-		go sendPaymentFailed(result.paymentRequest, strings.Join(errs, ", "), env)
+		sendPaymentFailed(result.paymentRequest, strings.Join(errs, ", "), env)
 		return
 	}
 
 	// TODO: lock funds to prevent races before submitting transaction
-	go initiateTransaction(result.paymentRequest, env)
+	initiateTransaction(result.paymentRequest, env)
 }
 
+// sends a message to the payment failed topic
 func sendPaymentFailed(req *cmn.PaymentRequest, reason string, env appEnv) {
-	// TODO: send payment failed message for gateway (or future notification service)
-	l := env.Logger()
-	l.Printf("Payment of £%d failed for account %d: %s", req.Amount, req.TargetAccountID, reason)
-	//TODO: error handling
+	env.Logger().Printf("Payment of £%d failed for account %d: %s", req.Amount, req.TargetAccountID, reason)
+	msg := (&paymentMsg{Type: paymentFailed, Reason: reason}).FromReq(req)
+
+	key, err := msg.Key()
+	if err != nil {
+		env.Logger().Println(err)
+		return
+	}
+	val, err := msg.Value()
+	if err != nil {
+		env.Logger().Println(err)
+		return
+	}
+
+	//TODO: write error handling
 	_ = env.writer.WriteMessages(env.CancelCtx(), kafka.Message{
-		Topic: cmn.Topics.PaymentFailed(),
+		Topic: cmn.Topics.PaymentFailed().S(),
+		Key:   key,
+		Value: val,
 	})
 
 }
 
+// send message(s) for transaction service
 func initiateTransaction(req *cmn.PaymentRequest, env appEnv) {
-	// send message(s) for transaction service
-
 	env.Logger().Printf("Initiate transaction of £%d from account %d to account %d", req.Amount, req.SourceAccountID, req.TargetAccountID)
 
 	txOut, err1 := json.Marshal(cmn.Transaction{
-		TxID:      req.SystemID,
-		AccountID: req.SourceAccountID,
-		Amount:    -req.Amount,
+		PaymentSysID: req.SystemID,
+		AccountID:    req.SourceAccountID,
+		Amount:       -req.Amount,
 	})
 	txIn, err2 := json.Marshal(cmn.Transaction{
-		TxID:      req.SystemID,
-		AccountID: req.TargetAccountID,
-		Amount:    req.Amount,
+		PaymentSysID: req.SystemID,
+		AccountID:    req.TargetAccountID,
+		Amount:       req.Amount,
 	})
 
 	if err1 != nil || err2 != nil {
@@ -144,11 +204,11 @@ func initiateTransaction(req *cmn.PaymentRequest, env appEnv) {
 
 	err := env.writer.WriteMessages(env.CancelCtx(),
 		kafka.Message{
-			Topic: cmn.Topics.TransactionRequested(),
+			Topic: cmn.Topics.TransactionRequested().S(),
 			Value: txOut,
 		},
 		kafka.Message{
-			Topic: cmn.Topics.TransactionRequested(),
+			Topic: cmn.Topics.TransactionRequested().S(),
 			Value: txIn,
 		})
 
@@ -158,16 +218,14 @@ func initiateTransaction(req *cmn.PaymentRequest, env appEnv) {
 
 }
 
+// check source account has required funds
 func checkBalance(req *cmn.PaymentRequest, chn chan<- checkResult, env appEnv) {
-	// check source account has required funds
-	checkName := "balance"
-
 	// artificial delay
 	sleep := rand.N(5000)
-	env.Logger().Printf("%s sleeping for %d", checkName, sleep)
+	env.Logger().Printf("%s sleeping for %d", balanceCheck, sleep)
 	time.Sleep(time.Duration(sleep) * time.Millisecond)
 
-	result := checkResult{checkName: checkName}
+	result := checkResult{checkName: balanceCheck}
 
 	srcAcc, err := env.DB().GetAccountByID(req.SourceAccountID)
 
@@ -183,17 +241,14 @@ func checkBalance(req *cmn.PaymentRequest, chn chan<- checkResult, env appEnv) {
 	chn <- result
 }
 
+// check target account exists
 func checkTargetAccount(req *cmn.PaymentRequest, chn chan<- checkResult, env appEnv) {
-	// check target account exists
-
-	checkName := "targetAccount"
-
 	// artificial delay
 	sleep := rand.N(5000)
-	env.Logger().Printf("%s sleeping for %d", checkName, sleep)
+	env.Logger().Printf("%s sleeping for %d", targetAccount, sleep)
 	time.Sleep(time.Duration(sleep) * time.Millisecond)
 
-	result := checkResult{checkName: checkName}
+	result := checkResult{checkName: targetAccount}
 
 	_, err := env.DB().GetAccountByID(req.SourceAccountID)
 
