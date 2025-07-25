@@ -15,7 +15,7 @@ type DBConfig struct {
 	Password       string
 	DBName         string
 	Host           string
-	ConnectTimeout int
+	ConnectTimeout int32
 }
 
 func (c DBConfig) ConnectionString() string {
@@ -75,12 +75,12 @@ func InitDB(conf DBConfig) (DBAll, error) {
 
 type DBAll interface {
 	Expose() *sql.DB
-	CreateUser(*User) (int, error)
+	CreateUser(*User) (int32, error)
 	LoadUserByName(string) (User, error)
-	LoadUserByID(int) (User, error)
-	GetUserAccounts(int) ([]Account, error)
-	CreateAccount(Account) (int, error)
-	GetAccountByID(int) (*Account, error)
+	LoadUserByID(int32) (User, error)
+	GetUserAccounts(int32) ([]Account, error)
+	CreateAccount(Account) (int32, error)
+	GetAccountByID(int32) (*Account, error)
 }
 
 type DB struct {
@@ -92,9 +92,9 @@ func (db *DB) Expose() *sql.DB {
 	return db.db
 }
 
-func (db *DB) CreateUser(user *User) (int, error) {
+func (db *DB) CreateUser(user *User) (int32, error) {
 	// Creates the user in the db, returning the new user id
-	userID := 0
+	userID := int32(0)
 	err := db.db.QueryRow(`
 		INSERT INTO accounts."user" (username, roles) VALUES ($1, $2) RETURNING id
 	`, user.Username, pq.Array(user.Roles)).Scan(&userID)
@@ -115,7 +115,7 @@ func (db *DB) LoadUserByName(username string) (User, error) {
 	return user, err
 }
 
-func (db *DB) LoadUserByID(userID int) (User, error) {
+func (db *DB) LoadUserByID(userID int32) (User, error) {
 	log.Printf("Try load user if %d from db...", userID)
 	var user User
 	err := db.db.QueryRow(`
@@ -124,7 +124,7 @@ func (db *DB) LoadUserByID(userID int) (User, error) {
 	return user, err
 }
 
-func (db *DB) GetUserAccounts(userID int) ([]Account, error) {
+func (db *DB) GetUserAccounts(userID int32) ([]Account, error) {
 	// get accounts from the user from db
 
 	// TODO: redis
@@ -156,7 +156,7 @@ func (db *DB) GetUserAccounts(userID int) ([]Account, error) {
 	return accounts, nil
 }
 
-func (db *DB) GetAccountByID(accountID int) (*Account, error) {
+func (db *DB) GetAccountByID(accountID int32) (*Account, error) {
 	// get account matching id.
 
 	// TODO: redis
@@ -173,8 +173,8 @@ func (db *DB) GetAccountByID(accountID int) (*Account, error) {
 	return &acc, nil
 }
 
-func (db *DB) CreateAccount(a Account) (int, error) {
-	var newAccID int
+func (db *DB) CreateAccount(a Account) (int32, error) {
+	var newAccID int32
 	err := db.db.QueryRow(`
 		INSERT INTO accounts.account (user_id, name)
 		VALUES ($1, $2)

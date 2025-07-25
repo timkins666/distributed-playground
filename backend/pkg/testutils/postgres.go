@@ -12,21 +12,21 @@ type BaseTestDB struct{}
 func (BaseTestDB) Expose() *sql.DB {
 	return nil
 }
-func (BaseTestDB) CreateUser(*cmn.User) (int, error) {
+func (BaseTestDB) CreateUser(*cmn.User) (int32, error) {
 	return -1, cmn.NotImplementedError
 }
 func (BaseTestDB) LoadUserByName(string) (cmn.User, error) {
 	return cmn.User{}, cmn.NotImplementedError
 }
-func (BaseTestDB) LoadUserByID(int) (cmn.User, error) {
+func (BaseTestDB) LoadUserByID(int32) (cmn.User, error) {
 	return cmn.User{}, cmn.NotImplementedError
 }
-func (BaseTestDB) GetUserAccounts(int) ([]cmn.Account, error) {
+func (BaseTestDB) GetUserAccounts(int32) ([]cmn.Account, error) {
 	return []cmn.Account{}, cmn.NotImplementedError
 }
-func (BaseTestDB) CreateAccount(cmn.Account) (int, error) {
+func (BaseTestDB) CreateAccount(cmn.Account) (int32, error) {
 	return -1, cmn.NotImplementedError
 }
-func (BaseTestDB) GetAccountByID(int) (*cmn.Account, error) {
+func (BaseTestDB) GetAccountByID(int32) (*cmn.Account, error) {
 	return nil, cmn.NotImplementedError
 }

@@ -71,7 +71,7 @@ func setUserID(r *http.Request) bool {
 		return false
 	}
 
-	*r = *r.WithContext(context.WithValue(r.Context(), UserIDKey, id))
+	*r = *r.WithContext(context.WithValue(r.Context(), UserIDKey, int32(id)))
 	return true
 }
 

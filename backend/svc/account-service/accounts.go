@@ -63,7 +63,7 @@ func main() {
 
 func getAllBanksHandler(w http.ResponseWriter, r *http.Request) {
 	env, _ := r.Context().Value(cmn.AppKey).(appEnv)
-	userID, ok := r.Context().Value(cmn.UserIDKey).(int)
+	userID, ok := r.Context().Value(cmn.UserIDKey).(int32)
 
 	if userID == 0 || !ok {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -84,7 +84,7 @@ func getAllBanksHandler(w http.ResponseWriter, r *http.Request) {
 
 func getUserAccountsHandler(w http.ResponseWriter, r *http.Request) {
 	env, _ := r.Context().Value(cmn.AppKey).(appEnv)
-	userID, _ := r.Context().Value(cmn.UserIDKey).(int)
+	userID, _ := r.Context().Value(cmn.UserIDKey).(int32)
 
 	if userID == 0 {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -110,13 +110,13 @@ func getUserAccountsHandler(w http.ResponseWriter, r *http.Request) {
 
 type newAccountRequest struct {
 	Name                 string `json:"name"`
-	SourceFundsAccountID int    `json:"sourceFundsAccountId"`
+	SourceFundsAccountID int32  `json:"sourceFundsAccountId"`
 	InitialBalance       int64  `json:"initialBalance"`
 }
 
 func createUserAccountHandler(w http.ResponseWriter, r *http.Request) {
 	env, _ := r.Context().Value(cmn.AppKey).(appEnv)
-	userID, _ := r.Context().Value(cmn.UserIDKey).(int)
+	userID, _ := r.Context().Value(cmn.UserIDKey).(int32)
 
 	var req *newAccountRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

@@ -111,7 +111,7 @@ func TestSetUserID(t *testing.T) {
 
 	setUserID(r)
 
-	result, ok := r.Context().Value(UserIDKey).(int)
+	result, ok := r.Context().Value(UserIDKey).(int32)
 	assert.Equal(t, ok, true)
-	assert.Equal(t, result, 123)
+	assert.Equal(t, int(result), 123)
 }

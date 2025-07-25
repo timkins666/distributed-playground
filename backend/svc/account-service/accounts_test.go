@@ -16,18 +16,18 @@ import (
 // MockDB is a mock implementation of the database interface for testing
 type MockDB struct {
 	tu.BaseTestDB
-	users    map[int]cmn.User
-	accounts map[int]cmn.Account
+	users    map[int32]cmn.User
+	accounts map[int32]cmn.Account
 }
 
 func NewMockDB() MockDB {
 	return MockDB{
-		users:    make(map[int]cmn.User),
-		accounts: make(map[int]cmn.Account),
+		users:    make(map[int32]cmn.User),
+		accounts: make(map[int32]cmn.Account),
 	}
 }
 
-func (m *MockDB) LoadUserByID(userID int) (cmn.User, error) {
+func (m *MockDB) LoadUserByID(userID int32) (cmn.User, error) {
 	user, ok := m.users[userID]
 	if !ok {
 		return cmn.User{}, nil
@@ -35,7 +35,7 @@ func (m *MockDB) LoadUserByID(userID int) (cmn.User, error) {
 	return user, nil
 }
 
-func (m *MockDB) GetUserAccounts(userID int) ([]cmn.Account, error) {
+func (m *MockDB) GetUserAccounts(userID int32) ([]cmn.Account, error) {
 	var accounts []cmn.Account
 	for _, acc := range m.accounts {
 		if acc.UserID == userID {
@@ -45,7 +45,7 @@ func (m *MockDB) GetUserAccounts(userID int) ([]cmn.Account, error) {
 	return accounts, nil
 }
 
-func (m *MockDB) GetAccountByID(accountID int) (*cmn.Account, error) {
+func (m *MockDB) GetAccountByID(accountID int32) (*cmn.Account, error) {
 	acc, ok := m.accounts[accountID]
 	if !ok {
 		return nil, nil
@@ -53,8 +53,8 @@ func (m *MockDB) GetAccountByID(accountID int) (*cmn.Account, error) {
 	return &acc, nil
 }
 
-func (m *MockDB) CreateAccount(a cmn.Account) (int, error) {
-	id := len(m.accounts) + 1
+func (m *MockDB) CreateAccount(a cmn.Account) (int32, error) {
+	id := int32(len(m.accounts) + 1)
 	a.AccountID = id
 	m.accounts[id] = a
 	return id, nil
@@ -91,7 +91,7 @@ func setupTestApp() appEnv {
 }
 
 // setupTestRequest creates a test HTTP request with the app and userID in the context
-func setupTestRequest(method, url string, body []byte, app appEnv, userID int) *http.Request {
+func setupTestRequest(method, url string, body []byte, app appEnv, userID int32) *http.Request {
 	req := httptest.NewRequest(method, url, bytes.NewBuffer(body))
 	ctx := context.WithValue(req.Context(), cmn.AppKey, app)
 	ctx = context.WithValue(ctx, cmn.UserIDKey, userID)
@@ -103,7 +103,7 @@ func TestGetAllBanksHandler(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		userID         int
+		userID         int32
 		expectedStatus int
 		expectedBanks  []*cmn.Bank
 	}{
@@ -147,7 +147,7 @@ func TestGetUserAccountsHandler(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		userID         int
+		userID         int32
 		expectedStatus int
 		expectedAccs   []cmn.Account
 	}{
@@ -210,7 +210,7 @@ func TestCreateUserAccountHandler(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		userID         int
+		userID         int32
 		request        newAccountRequest
 		expectedStatus int
 		checkResponse  func(t *testing.T, resp []byte, mockWriter *tu.MockKafkaWriter)
@@ -228,7 +228,7 @@ func TestCreateUserAccountHandler(t *testing.T) {
 				assert.Equal(t, nil, err)
 				assert.Equal(t, 1, len(accounts))
 				assert.Equal(t, "First Account", accounts[0].Name)
-				assert.Equal(t, 2, accounts[0].UserID)
+				assert.Equal(t, int32(2), accounts[0].UserID)
 				assert.Equal(t, 1, len(mockWriter.Messages))
 			},
 		},
@@ -260,7 +260,7 @@ func TestCreateUserAccountHandler(t *testing.T) {
 
 				assert.Equal(t, "Second Account", newAcc.Name)
 				assert.Equal(t, int64(500), newAcc.Balance)
-				assert.Equal(t, 1, newAcc.UserID)
+				assert.Equal(t, int32(1), newAcc.UserID)
 
 				// Check source account balance was reduced
 				assert.Equal(t, int64(500), sourceAcc.Balance) // 1000 - 500

@@ -187,32 +187,40 @@ func sendPaymentFailed(req *cmn.PaymentRequest, reason string, env appEnv) {
 func initiateTransaction(req *cmn.PaymentRequest, env appEnv) {
 	env.Logger().Printf("Initiate transaction of £%d from account %d to account %d", req.Amount, req.SourceAccountID, req.TargetAccountID)
 
-	txOut, err1 := json.Marshal(cmn.Transaction{
+	txOut := cmn.Transaction{
 		PaymentSysID: req.SystemID,
 		AccountID:    req.SourceAccountID,
 		Amount:       -req.Amount,
-	})
-	txIn, err2 := json.Marshal(cmn.Transaction{
+	}
+	vOut, errvOut := txOut.MsgValue()
+	kOut, errkOut := txOut.MsgKey()
+
+	txIn := cmn.Transaction{
 		PaymentSysID: req.SystemID,
 		AccountID:    req.TargetAccountID,
 		Amount:       req.Amount,
-	})
+	}
+	vIn, errvIn := txIn.MsgValue()
+	kIn, errkIn := txIn.MsgKey()
 
-	if err1 != nil || err2 != nil {
+	if errvOut != nil || errkOut != nil || errvIn != nil || errkIn != nil {
 		sendPaymentFailed(req, "processing error", env)
 	}
 
 	err := env.writer.WriteMessages(env.CancelCtx(),
 		kafka.Message{
 			Topic: cmn.Topics.TransactionRequested().S(),
-			Value: txOut,
+			Key:   kOut,
+			Value: vOut,
 		},
 		kafka.Message{
 			Topic: cmn.Topics.TransactionRequested().S(),
-			Value: txIn,
+			Key:   kIn,
+			Value: vIn,
 		})
 
 	if err != nil {
+		// TODO: what if one message sent
 		sendPaymentFailed(req, "failed to initiate transaction", env)
 	}
 
