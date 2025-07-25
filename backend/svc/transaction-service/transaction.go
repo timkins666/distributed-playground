@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -9,15 +8,12 @@ import (
 
 	"github.com/segmentio/kafka-go"
 	cmn "github.com/timkins666/distributed-playground/backend/pkg/common"
-	// TODO import "github.com/Masterminds/squirrel"
 )
 
-type app struct {
-	cancelCtx context.Context
-	db        *cmn.DB
-	txReader  *kafka.Reader
-	writer    *kafka.Writer
-	log       *log.Logger
+type appEnv struct {
+	cmn.BaseEnv
+	txReader cmn.KafkaReader
+	writer   cmn.KafkaWriter
 }
 
 func main() {
@@ -26,7 +22,7 @@ func main() {
 
 	reader := kafka.NewReader(kafka.ReaderConfig{
 		GroupID: "process-transaction",
-		Topic:   cmn.Topics.TransactionRequested(),
+		Topic:   cmn.Topics.TransactionRequested().S(),
 	})
 	defer reader.Close()
 
@@ -41,15 +37,13 @@ func main() {
 		log.Panicln(err.Error())
 	}
 
-	app := app{
-		cancelCtx: cancelCtx,
-		db:        db,
-		txReader:  reader,
-		writer:    writer,
-		log:       cmn.AppLogger(),
+	env := appEnv{
+		BaseEnv:  cmn.BaseEnv{}.WithCancelCtx(cancelCtx).WithDB(db),
+		txReader: reader,
+		writer:   writer,
 	}
 
-	go processTransaction(app)
+	go processTransaction(env)
 
 	for {
 		select {
@@ -61,13 +55,13 @@ func main() {
 	}
 }
 
-func processTransaction(app app) {
+func processTransaction(env appEnv) {
 	// commit transaction to db
 
 	// TODO: failed messages
 
 	for {
-		msg, err := app.txReader.ReadMessage(app.cancelCtx)
+		msg, err := env.txReader.ReadMessage(env.CancelCtx())
 		if err != nil {
 			log.Println(err)
 			continue
@@ -80,7 +74,7 @@ func processTransaction(app app) {
 			return
 		}
 
-		err = commitToDB(tx, app)
+		err = commitToDB(tx, env)
 		if err != nil {
 			log.Println("Error committing transaction, this is probably bad", err)
 			return
@@ -91,8 +85,9 @@ func processTransaction(app app) {
 	}
 }
 
-func commitToDB(transaction *cmn.Transaction, app app) error {
-	tx, err := app.db.Expose().Begin()
+// temp - TODO main method
+func commitToDB(transaction *cmn.Transaction, env appEnv) error {
+	tx, err := env.DB().Expose().Begin()
 	if err != nil {
 		return err
 	}

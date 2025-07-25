@@ -36,17 +36,16 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/login", loginHandler)
-	// mux.HandleFunc("/admin", adminHandler)
 
 	port := ":" + os.Getenv("SERVE_PORT")
 	log.Printf("Auth service running on %s", port)
 	log.Fatal(http.ListenAndServe(port,
 		cmn.SetContextValuesMiddleware(
-			map[cmn.ContextKey]any{cmn.AppKey: app})(mux)))
+			map[cmn.ContextKey]any{cmn.EnvKey: app})(mux)))
 }
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
-	app, _ := r.Context().Value(cmn.AppKey).(env)
+	app, _ := r.Context().Value(cmn.EnvKey).(env)
 
 	var req cmn.LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -129,22 +128,3 @@ func getOrCreateUser(username string, app env) (cmn.User, error) {
 
 	return user, err
 }
-
-// // for testing tokens, will go away soon
-// func adminHandler(w http.ResponseWriter, _ *http.Request) {
-// 	user, err := cmn.GetUserFromToken(r)
-// 	if err != nil || !user.Valid() {
-// 		w.WriteHeader(http.StatusUnauthorized)
-// 		fmt.Println(w, "Nope")
-// 		return
-// 	}
-
-// 	if !slices.Contains(user.Roles, "admin") {
-// 		log.Printf("User %s does not have admin role (has %s)", user.Username, user.Roles)
-// 		w.WriteHeader(http.StatusUnauthorized)
-// 		fmt.Println(w, "Not admin")
-// 		return
-// 	}
-
-// 	w.WriteHeader(http.StatusOK)
-// }

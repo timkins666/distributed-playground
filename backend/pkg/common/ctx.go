@@ -3,13 +3,7 @@ package common
 import (
 	"context"
 	"log"
-
-	"github.com/segmentio/kafka-go"
 )
-
-type Writer interface {
-	Writer() *kafka.Writer
-}
 
 type Env interface {
 	CancelCtx() context.Context

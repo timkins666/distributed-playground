@@ -44,6 +44,23 @@ func (pr *PaymentRequest) Valid() bool {
 		pr.Timestamp.After(time.Now().Add(-10*time.Second))
 }
 
+func (pr PaymentRequest) FromBytes(b []byte) (*PaymentRequest, error) {
+	buf := new(bytes.Buffer)
+	buf.Write(b)
+	err := gob.NewDecoder(buf).Decode(&pr)
+	return &pr, err
+}
+func (pr PaymentRequest) MsgKey() ([]byte, error) {
+	buf := new(bytes.Buffer)
+	err := binary.Write(buf, binary.LittleEndian, pr.SourceAccountID)
+	return buf.Bytes(), err
+}
+func (pr PaymentRequest) MsgValue() ([]byte, error) {
+	buf := new(bytes.Buffer)
+	err := gob.NewEncoder(buf).Encode(pr)
+	return buf.Bytes(), err
+}
+
 type Transaction struct {
 	TxID         string
 	PaymentSysID string

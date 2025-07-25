@@ -58,11 +58,11 @@ func main() {
 	log.Fatal(http.ListenAndServe(port,
 		cmn.SetUserIDMiddlewareHandler(
 			cmn.SetContextValuesMiddleware(
-				map[cmn.ContextKey]any{cmn.AppKey: env})(mux))))
+				map[cmn.ContextKey]any{cmn.EnvKey: env})(mux))))
 }
 
 func getAllBanksHandler(w http.ResponseWriter, r *http.Request) {
-	env, _ := r.Context().Value(cmn.AppKey).(appEnv)
+	env, _ := r.Context().Value(cmn.EnvKey).(appEnv)
 	userID, ok := r.Context().Value(cmn.UserIDKey).(int32)
 
 	if userID == 0 || !ok {
@@ -83,7 +83,7 @@ func getAllBanksHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func getUserAccountsHandler(w http.ResponseWriter, r *http.Request) {
-	env, _ := r.Context().Value(cmn.AppKey).(appEnv)
+	env, _ := r.Context().Value(cmn.EnvKey).(appEnv)
 	userID, _ := r.Context().Value(cmn.UserIDKey).(int32)
 
 	if userID == 0 {
@@ -115,7 +115,7 @@ type newAccountRequest struct {
 }
 
 func createUserAccountHandler(w http.ResponseWriter, r *http.Request) {
-	env, _ := r.Context().Value(cmn.AppKey).(appEnv)
+	env, _ := r.Context().Value(cmn.EnvKey).(appEnv)
 	userID, _ := r.Context().Value(cmn.UserIDKey).(int32)
 
 	var req *newAccountRequest

@@ -17,7 +17,7 @@ var secretKey = []byte("super-secret-shh")
 type ContextKey string
 
 const UserIDKey ContextKey = "userIDKey"
-const AppKey ContextKey = "app"
+const EnvKey ContextKey = "app"
 
 const authHeader string = "Authorization"
 const authHeaderPrefix string = "Bearer "

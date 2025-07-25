@@ -93,7 +93,7 @@ func setupTestApp() appEnv {
 // setupTestRequest creates a test HTTP request with the app and userID in the context
 func setupTestRequest(method, url string, body []byte, app appEnv, userID int32) *http.Request {
 	req := httptest.NewRequest(method, url, bytes.NewBuffer(body))
-	ctx := context.WithValue(req.Context(), cmn.AppKey, app)
+	ctx := context.WithValue(req.Context(), cmn.EnvKey, app)
 	ctx = context.WithValue(ctx, cmn.UserIDKey, userID)
 	return req.WithContext(ctx)
 }
