@@ -1,11 +1,10 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
+	"errors"
 	"log"
-	"time"
 
+	"github.com/google/uuid"
 	"github.com/segmentio/kafka-go"
 	cmn "github.com/timkins666/distributed-playground/backend/pkg/common"
 )
@@ -21,6 +20,7 @@ func main() {
 	defer stop()
 
 	reader := kafka.NewReader(kafka.ReaderConfig{
+		Brokers: []string{cmn.KafkaBroker()},
 		GroupID: "process-transaction",
 		Topic:   cmn.Topics.TransactionRequested().S(),
 	})
@@ -43,93 +43,98 @@ func main() {
 		writer:   writer,
 	}
 
-	go processTransaction(env)
-
 	for {
 		select {
 		case <-cancelCtx.Done():
 			return
 		default:
-			time.Sleep(2 * time.Second)
+			msg, err := env.txReader.ReadMessage(env.CancelCtx())
+			if err != nil {
+				env.Logger().Println(err)
+				continue
+			}
+			processMessage(msg, env)
 		}
 	}
 }
 
-func processTransaction(env appEnv) {
-	// commit transaction to db
+var (
+	errorParsingTransaction    = errors.New("error parsing transaction")
+	errorInvalidTransaction    = errors.New("parsed transaction but bad data")
+	errorCommittingTransaction = errors.New("error committing transaction, this is probably bad")
+)
 
-	// TODO: failed messages
+func processMessage(msg kafka.Message, env appEnv) error {
+	tx, err := cmn.FromBytes[cmn.Transaction](msg.Value)
 
-	for {
-		msg, err := env.txReader.ReadMessage(env.CancelCtx())
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-
-		var tx *cmn.Transaction
-		err = json.Unmarshal(msg.Value, tx)
-		if err != nil {
-			log.Println("Error reading transaction", err)
-			return
-		}
-
-		err = commitToDB(tx, env)
-		if err != nil {
-			log.Println("Error committing transaction, this is probably bad", err)
-			return
-		}
-
-		// TODO: complete message
-		log.Printf("Completed transaction %+v", tx)
+	if err != nil {
+		env.Logger().Println(err)
+		env.Logger().Printf("received bytes:\n%s", msg.Value)
+		return errorParsingTransaction
 	}
+
+	if !tx.Valid() {
+		env.Logger().Println(errorInvalidTransaction)
+		return errorInvalidTransaction
+	}
+
+	tx.TxID = uuid.NewString()
+
+	err = env.DB().CommitTransaction(tx)
+	if err != nil {
+		env.Logger().Println(err)
+		return errorCommittingTransaction
+	}
+
+	// TODO: complete kafka message
+	env.Logger().Printf("Completed transaction %+v", tx)
+	return nil
 }
 
-// temp - TODO main method
-func commitToDB(transaction *cmn.Transaction, env appEnv) error {
-	tx, err := env.DB().Expose().Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
+// func commitToDB(transaction *cmn.Transaction, env appEnv) error {
+// 	tx, err := env.DB().Expose().Begin()
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer tx.Rollback()
 
-	// TODO: redis
-	var exists bool
-	err = tx.QueryRow(`
-        SELECT EXISTS (
-            SELECT 1 FROM transactions.transaction WHERE id = $1
-        )`, transaction.TxID).Scan(&exists)
-	if err != nil {
-		return err
-	}
-	if exists {
-		log.Println("Transaction already processed:", transaction.TxID)
-		return nil
-	}
+// 	// TODO: redis
+// 	var exists bool
+// 	err = tx.QueryRow(`
+//         SELECT EXISTS (
+//             SELECT 1 FROM transactions.transaction WHERE id = $1
+//         )`, transaction.TxID).Scan(&exists)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	if exists {
+// 		env.Logger().Println("Transaction already processed:", transaction.TxID)
+// 		return nil
+// 	}
 
-	var balance int64
-	// FOR UPDATE = pessimistic lock
-	err = tx.QueryRow(`
-        SELECT balance FROM accounts WHERE id = $1 FOR UPDATE
-    `, transaction.AccountID).Scan(&balance)
-	if err != nil {
-		return fmt.Errorf("account not found: %w", err)
-	}
+// 	var balance int64
+// 	// FOR UPDATE = pessimistic lock
+// 	err = tx.QueryRow(`
+//         SELECT balance FROM accounts WHERE id = $1 FOR UPDATE
+//     `, transaction.AccountID).Scan(&balance)
+// 	if err != nil {
+// 		return fmt.Errorf("account not found: %w", err)
+// 	}
 
-	newBalance := balance + transaction.Amount
-	_, err = tx.Exec(`
-        UPDATE accounts SET balance = $1 WHERE id = $2
-    `, newBalance, transaction.AccountID)
-	if err != nil {
-		return err
-	}
+// 	newBalance := balance + transaction.Amount
+// 	_, err = tx.Exec(`
+//         UPDATE accounts SET balance = $1 WHERE id = $2
+//     `, newBalance, transaction.AccountID)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	_, err = tx.Exec(`
-        INSERT INTO transactions (id, account_id, amount) VALUES ($1, $2, $3)
-    `, transaction.TxID, transaction.AccountID, transaction.Amount)
-	if err != nil {
-		return err
-	}
+// 	_, err = tx.Exec(`
+//         INSERT INTO transactions (id, account_id, amount) VALUES ($1, $2, $3)
+//     `, transaction.TxID, transaction.AccountID, transaction.Amount)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	return tx.Commit()
-}
+// 	return tx.Commit()
+// }

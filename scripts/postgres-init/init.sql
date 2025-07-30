@@ -1,7 +1,7 @@
 \connect banking postgres
 BEGIN;
 
--- Transactions schema
+-- transactions
 CREATE SCHEMA IF NOT EXISTS transactions;
 
 CREATE TABLE IF NOT EXISTS transactions.transaction (
@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS transactions.transaction (
     created_at TIMESTAMP DEFAULT now()
 );
 
--- Accounts schema
+-- accounts
 CREATE SCHEMA IF NOT EXISTS accounts;
 
 CREATE TABLE IF NOT EXISTS accounts."user" (
@@ -27,5 +27,19 @@ CREATE TABLE IF NOT EXISTS accounts.account (
     user_id INT NOT NULL REFERENCES accounts."user"(id),
     balance BIGINT NOT NULL DEFAULT 0
 );
+
+-- Payments
+CREATE SCHEMA IF NOT EXISTS payments;
+
+CREATE TABLE IF NOT EXISTS payments.transfer (
+    system_id UUID NOT NULL PRIMARY KEY,
+    app_id UUID NOT NULL,
+    source_account_id INT NOT NULL REFERENCES accounts.account("id"),
+    target_account_id INT NOT NULL REFERENCES accounts.account("id"),
+    amount BIGINT NOT NULL,
+    status TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT now()
+);
+
 
 COMMIT;

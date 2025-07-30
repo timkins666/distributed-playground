@@ -31,7 +31,7 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/pay", handlePaymentRequest)
+	mux.HandleFunc("/transfer", handlePaymentRequest)
 
 	port := ":" + os.Getenv("SERVE_PORT")
 	log.Printf("Payment service running on %s", port)
@@ -41,7 +41,7 @@ func main() {
 				map[cmn.ContextKey]any{cmn.EnvKey: env})(mux))))
 }
 
-// handles initial request from gateway
+// handles initial transfer request from gateway
 func handlePaymentRequest(w http.ResponseWriter, r *http.Request) {
 	env, ok := r.Context().Value(cmn.EnvKey).(appEnv)
 	if !ok {
@@ -63,13 +63,20 @@ func handlePaymentRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	msg, err := req.MsgValue()
+	msg, err := cmn.ToBytes(req)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	key, err := req.MsgKey()
+	key, err := cmn.ToBytes(req.SourceAccountID)
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// create payment in system for tracking and analytics/reconciliation
+	if err = createDBPayment(req, env); err != nil {
+		env.Logger().Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -87,4 +94,9 @@ func handlePaymentRequest(w http.ResponseWriter, r *http.Request) {
 
 	env.Logger().Printf("Sent payment-requested message: %s", msg)
 	w.WriteHeader(http.StatusAccepted)
+}
+
+func createDBPayment(req cmn.PaymentRequest, env appEnv) error {
+	log.Printf("saving payment to db: %+v", req)
+	return env.DB().CreatePayment(&req)
 }

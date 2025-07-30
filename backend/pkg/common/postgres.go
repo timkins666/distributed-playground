@@ -2,6 +2,7 @@ package common
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -81,19 +82,50 @@ type DBAll interface {
 	GetUserAccounts(int32) ([]Account, error)
 	CreateAccount(Account) (int32, error)
 	GetAccountByID(int32) (*Account, error)
+	CreatePayment(*PaymentRequest) error
+	UpdatePaymentStatus(string, string) error
+	CommitTransaction(*Transaction) error
 }
 
 type DB struct {
 	db *sql.DB
 }
 
+func (db *DB) CreatePayment(pr *PaymentRequest) error {
+	// TODO: check affected row count == 1
+	_, err := db.db.Exec(`
+	INSERT INTO payments.transfer (
+		system_id,
+		app_id,
+		source_account_id,
+		target_account_id,
+		amount,
+		status
+		)
+		VALUES ($1, $2, $3, $4, $5, "PENDING")
+		`, pr.SystemID, pr.AppID, pr.SourceAccountID, pr.TargetAccountID, pr.Amount)
+
+	return err
+}
+
+func (db *DB) UpdatePaymentStatus(sysId, status string) error {
+	// TODO: check affected row count == 1
+	_, err := db.db.Exec(`
+		UPDATE payments.transfer
+		SET status = $1
+		WHERE system_id = $2
+	`, status, sysId)
+
+	return err
+}
+
+// return the underlying sql.DB for query prototyping
 func (db *DB) Expose() *sql.DB {
-	// return the underlying sql.DB
 	return db.db
 }
 
+// Creates the user in the db, returning the new user id
 func (db *DB) CreateUser(user *User) (int32, error) {
-	// Creates the user in the db, returning the new user id
 	userID := int32(0)
 	err := db.db.QueryRow(`
 		INSERT INTO accounts."user" (username, roles) VALUES ($1, $2) RETURNING id
@@ -101,8 +133,8 @@ func (db *DB) CreateUser(user *User) (int32, error) {
 	return userID, err
 }
 
+// load user by name from db.
 func (db *DB) LoadUserByName(username string) (User, error) {
-	// load user by name from db.
 	// searches case insensitively, returns userame casing as in db
 
 	log.Printf("Try load user %s from db...", username)
@@ -124,8 +156,8 @@ func (db *DB) LoadUserByID(userID int32) (User, error) {
 	return user, err
 }
 
+// get all accounts for the user from db
 func (db *DB) GetUserAccounts(userID int32) ([]Account, error) {
-	// get accounts from the user from db
 
 	// TODO: redis
 	// TOFO: squirrel / sqlx
@@ -133,7 +165,7 @@ func (db *DB) GetUserAccounts(userID int32) ([]Account, error) {
 	var accounts []Account
 
 	rows, err := db.db.Query(`
-		SELECT id, user_id, balance FROM accounts.account WHERE user_id = $1
+		SELECT id, name, balance FROM accounts.account WHERE user_id = $1
 	`, userID)
 	if err != nil {
 		return nil, err
@@ -142,7 +174,7 @@ func (db *DB) GetUserAccounts(userID int32) ([]Account, error) {
 
 	for rows.Next() {
 		var acc Account
-		err := rows.Scan(&acc.AccountID, &acc.UserID, &acc.Balance)
+		err := rows.Scan(&acc.AccountID, &acc.Name, &acc.Balance)
 		if err != nil {
 			return nil, err
 		}
@@ -153,11 +185,13 @@ func (db *DB) GetUserAccounts(userID int32) ([]Account, error) {
 		return nil, err
 	}
 
+	log.Printf("user %d accounts\n%+v", userID, accounts)
+
 	return accounts, nil
 }
 
+// get single account matching id.
 func (db *DB) GetAccountByID(accountID int32) (*Account, error) {
-	// get account matching id.
 
 	// TODO: redis
 	// TOFO: squirrel / sqlx
@@ -176,9 +210,63 @@ func (db *DB) GetAccountByID(accountID int32) (*Account, error) {
 func (db *DB) CreateAccount(a Account) (int32, error) {
 	var newAccID int32
 	err := db.db.QueryRow(`
-		INSERT INTO accounts.account (user_id, name)
-		VALUES ($1, $2)
+		INSERT INTO accounts.account (user_id, name, balance)
+		VALUES ($1, $2, $3)
 		RETURNING id
-		`, a.UserID, a.Name).Scan(&newAccID)
+		`, a.UserID, a.Name, a.Balance).Scan(&newAccID)
 	return newAccID, err
+}
+
+var (
+	ErrTxProcessed     = errors.New("transaction already processed")
+	ErrAccountNotExist = errors.New("account doesn't exist")
+)
+
+func (db *DB) CommitTransaction(transaction *Transaction) error {
+	tx, err := db.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// TODO: redis
+	var exists bool
+	err = tx.QueryRow(`
+        SELECT EXISTS (
+            SELECT 1 FROM transactions.transaction WHERE id = $1
+        )`, transaction.TxID).Scan(&exists)
+	if err != nil {
+		return err
+	}
+	if exists {
+		log.Println("Transaction already processed:", transaction.TxID)
+		return ErrTxProcessed
+	}
+
+	var balance int64
+	// FOR UPDATE = pessimistic lock
+	err = tx.QueryRow(`
+        SELECT balance FROM accounts WHERE id = $1 FOR UPDATE
+    `, transaction.AccountID).Scan(&balance)
+	if err != nil {
+		log.Printf("account not found: %+v", transaction)
+		return ErrAccountNotExist
+	}
+
+	newBalance := balance + transaction.Amount
+	_, err = tx.Exec(`
+        UPDATE accounts SET balance = $1 WHERE id = $2
+    `, newBalance, transaction.AccountID)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`
+        INSERT INTO transactions (id, account_id, amount) VALUES ($1, $2, $3)
+    `, transaction.TxID, transaction.AccountID, transaction.Amount)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }

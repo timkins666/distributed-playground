@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"encoding/binary"
 	"testing"
 
 	"github.com/bmizerany/assert"
@@ -92,22 +90,19 @@ func TestHandleResultsFailedChecks(t *testing.T) {
 			assert.Equal(t, len(writer.Messages), 1)
 			assert.Equal(t, writer.Messages[0].Topic, tt.wantTopic.S())
 
-			pm, err := paymentMsg{}.FromBytes(writer.Messages[0].Value)
+			pm, err := cmn.FromBytes[paymentMsg](writer.Messages[0].Value)
 			if err != nil {
 				t.Fatal("error decoding message value")
 			}
-			assert.Equal(t, pm.AccountID, int32(pr.SourceAccountID))
-			assert.Equal(t, pm.SystemID, pr.SystemID)
-			assert.Equal(t, pm.Reason, tt.wantReason)
+			assert.Equal(t, int32(pr.SourceAccountID), pm.AccountID)
+			assert.Equal(t, pr.SystemID, pm.SystemID)
+			assert.Equal(t, tt.wantReason, pm.Reason)
 
-			buf := new(bytes.Buffer)
-			buf.Write(writer.Messages[0].Key)
-
-			var key int32
-			if err := binary.Read(buf, binary.LittleEndian, &key); err != nil {
+			key, err := cmn.FromBytes[int32](writer.Messages[0].Key)
+			if err != nil {
 				t.Fatal("error decoding key", err)
 			}
-			assert.Equal(t, int32(key), pr.SourceAccountID)
+			assert.Equal(t, pr.SourceAccountID, *key)
 		})
 	}
 }
@@ -158,21 +153,18 @@ func TestHandleResultsChecksPassed(t *testing.T) {
 			assert.Equal(t, m1.Topic, cmn.Topics.TransactionRequested().S())
 			assert.Equal(t, m2.Topic, cmn.Topics.TransactionRequested().S())
 
-			tx, err := cmn.Transaction{}.FromBytes(m1.Value)
+			tx, err := cmn.FromBytes[cmn.Transaction](m1.Value)
 			if err != nil {
 				t.Fatal("error decoding message value")
 			}
 			assert.Equal(t, tx.AccountID, int32(pr.SourceAccountID))
 			assert.Equal(t, tx.PaymentSysID, pr.SystemID)
 
-			buf := new(bytes.Buffer)
-			buf.Write(writer.Messages[0].Key)
-
-			var key int32
-			if err := binary.Read(buf, binary.LittleEndian, &key); err != nil {
+			key, err := cmn.FromBytes[int32](writer.Messages[0].Key)
+			if err != nil {
 				t.Fatal("error decoding key", err)
 			}
-			assert.Equal(t, int32(key), pr.SourceAccountID)
+			assert.Equal(t, pr.SourceAccountID, *key)
 		})
 	}
 }

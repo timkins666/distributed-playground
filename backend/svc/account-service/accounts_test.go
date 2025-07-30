@@ -18,6 +18,7 @@ type MockDB struct {
 	tu.BaseTestDB
 	users    map[int32]cmn.User
 	accounts map[int32]cmn.Account
+	payments []cmn.PaymentRequest
 }
 
 func NewMockDB() MockDB {
@@ -58,6 +59,11 @@ func (m *MockDB) CreateAccount(a cmn.Account) (int32, error) {
 	a.AccountID = id
 	m.accounts[id] = a
 	return id, nil
+}
+
+func (m *MockDB) CreatePayment(pr *cmn.PaymentRequest) error {
+	m.payments = append(m.payments, *pr)
+	return nil
 }
 
 // setupTestApp creates a test app with mock dependencies
@@ -340,11 +346,4 @@ func TestCreateUserAccountHandler(t *testing.T) {
 			tt.checkResponse(t, w.Body.Bytes(), writer)
 		})
 	}
-}
-
-// TestPaymentValidator tests the payment validation logic
-func TestPaymentValidator(t *testing.T) {
-	// This is a more complex test that would involve mocking Kafka messages
-	// and testing the asynchronous processing. For simplicity, we'll focus on
-	// the handler tests first.
 }

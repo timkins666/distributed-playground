@@ -74,7 +74,7 @@ services:
     container_name: account-service
     build:
       context: ./backend
-      dockerfile: ./Dockerfile.debug
+      dockerfile: ./Dockerfile
       args:
         GO_VERSION: $GO_VERSION
         SERVICE_NAME: account-service
@@ -96,6 +96,18 @@ services:
     environment:
       SERVE_PORT: $PAYMENT_PORT
       KAFKA_BROKER: $KAFKA_BROKER
+
+  transaction-service:
+    container_name: transaction-service
+    build:
+      context: ./backend
+      dockerfile: ./Dockerfile
+      args:
+        GO_VERSION: $GO_VERSION
+        SERVICE_NAME: transaction-service
+    environment:
+      KAFKA_BROKER: $KAFKA_BROKER
+      POSTGRES_HOST: $POSTGRES_HOST
 
   kafka:
     image: bitnami/kafka:latest
@@ -143,7 +155,7 @@ services:
     # volumes:
     #   - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready", "-U", "postgres"] #, "-d", "db_prod"]
+      test: ["CMD-SHELL", "pg_isready", "-U", "postgres"]
       interval: 3s
       timeout: 3s
       retries: 10

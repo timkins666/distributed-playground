@@ -2,7 +2,6 @@ package common
 
 import (
 	"bytes"
-	"encoding/binary"
 	"encoding/gob"
 	"time"
 
@@ -44,20 +43,16 @@ func (pr *PaymentRequest) Valid() bool {
 		pr.Timestamp.After(time.Now().Add(-10*time.Second))
 }
 
-func (pr PaymentRequest) FromBytes(b []byte) (*PaymentRequest, error) {
-	buf := new(bytes.Buffer)
-	buf.Write(b)
-	err := gob.NewDecoder(buf).Decode(&pr)
-	return &pr, err
+func FromBytes[T any](b []byte) (*T, error) {
+	var t T
+	buf := bytes.NewBuffer(b)
+	err := gob.NewDecoder(buf).Decode(&t)
+	return &t, err
 }
-func (pr PaymentRequest) MsgKey() ([]byte, error) {
+
+func ToBytes[T any](t T) ([]byte, error) {
 	buf := new(bytes.Buffer)
-	err := binary.Write(buf, binary.LittleEndian, pr.SourceAccountID)
-	return buf.Bytes(), err
-}
-func (pr PaymentRequest) MsgValue() ([]byte, error) {
-	buf := new(bytes.Buffer)
-	err := gob.NewEncoder(buf).Encode(pr)
+	err := gob.NewEncoder(buf).Encode(t)
 	return buf.Bytes(), err
 }
 
@@ -68,21 +63,10 @@ type Transaction struct {
 	AccountID    int32
 }
 
-func (t Transaction) FromBytes(b []byte) (*Transaction, error) {
-	buf := new(bytes.Buffer)
-	buf.Write(b)
-	err := gob.NewDecoder(buf).Decode(&t)
-	return &t, err
-}
-func (t Transaction) MsgKey() ([]byte, error) {
-	buf := new(bytes.Buffer)
-	err := binary.Write(buf, binary.LittleEndian, t.AccountID)
-	return buf.Bytes(), err
-}
-func (t Transaction) MsgValue() ([]byte, error) {
-	buf := new(bytes.Buffer)
-	err := gob.NewEncoder(buf).Encode(t)
-	return buf.Bytes(), err
+func (t *Transaction) Valid() bool {
+	return t.PaymentSysID != "" &&
+		t.Amount != 0 &&
+		t.AccountID != 0
 }
 
 type Account struct {

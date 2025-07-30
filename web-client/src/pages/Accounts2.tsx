@@ -1,34 +1,34 @@
 import {
-    Box,
-    Button,
-    Card,
-    CardContent,
-    Dialog,
-    DialogActions,
-    DialogContent,
-    DialogTitle,
-    FormControl,
-    Grid,
-    InputLabel,
-    MenuItem,
-    Paper,
-    Select,
-    TextField,
-    Typography,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControl,
+  Grid,
+  InputLabel,
+  MenuItem,
+  Paper,
+  Select,
+  TextField,
+  Typography,
 } from "@mui/material";
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
-    setAccounts,
-    setTriedLoadAccounts,
-    updateAccounts,
-    userAccountsSelector,
+  setAccounts,
+  setTriedLoadAccounts,
+  updateAccounts,
+  userAccountsSelector,
 } from "../components/accounts/accountsSlice";
 import { authSelector } from "../components/auth/authSlice";
 import {
-    banksSelector,
-    setBanks,
-    setTriedLoadBanks,
+  banksSelector,
+  setBanks,
+  setTriedLoadBanks,
 } from "../components/banks/banksSlice";
 import { gatewayUrl } from "../conf";
 
@@ -143,7 +143,7 @@ const UserDashboard = () => {
         return
     }
 
-    const res = await fetch(gatewayUrl("payment", "pay"), {
+    const res = await fetch(gatewayUrl("payment", "transfer"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

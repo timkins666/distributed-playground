@@ -1,10 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"encoding/binary"
-	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"math/rand/v2"
@@ -52,22 +49,6 @@ func (pm *paymentMsg) FromReq(req *cmn.PaymentRequest) *paymentMsg {
 	pm.AppID = req.AppID
 	pm.SystemID = req.SystemID
 	return pm
-}
-func (pm paymentMsg) FromBytes(b []byte) (*paymentMsg, error) {
-	buf := new(bytes.Buffer)
-	buf.Write(b)
-	err := gob.NewDecoder(buf).Decode(&pm)
-	return &pm, err
-}
-func (pm *paymentMsg) Key() ([]byte, error) {
-	buf := new(bytes.Buffer)
-	err := binary.Write(buf, binary.LittleEndian, pm.AccountID)
-	return buf.Bytes(), err
-}
-func (pm *paymentMsg) Value() ([]byte, error) {
-	buf := new(bytes.Buffer)
-	err := gob.NewEncoder(buf).Encode(pm)
-	return buf.Bytes(), err
 }
 
 // handles validation of requested payments
@@ -163,12 +144,12 @@ func sendPaymentFailed(req *cmn.PaymentRequest, reason string, env appEnv) {
 	env.Logger().Printf("Payment of £%d failed for account %d: %s", req.Amount, req.TargetAccountID, reason)
 	msg := (&paymentMsg{Type: paymentFailed, Reason: reason}).FromReq(req)
 
-	key, err := msg.Key()
+	key, err := cmn.ToBytes(msg.AccountID)
 	if err != nil {
 		env.Logger().Println(err)
 		return
 	}
-	val, err := msg.Value()
+	val, err := cmn.ToBytes(msg)
 	if err != nil {
 		env.Logger().Println(err)
 		return
@@ -192,19 +173,20 @@ func initiateTransaction(req *cmn.PaymentRequest, env appEnv) {
 		AccountID:    req.SourceAccountID,
 		Amount:       -req.Amount,
 	}
-	vOut, errvOut := txOut.MsgValue()
-	kOut, errkOut := txOut.MsgKey()
+	kOut, errkOut := cmn.ToBytes(txOut.AccountID)
+	vOut, errvOut := cmn.ToBytes(txOut)
 
 	txIn := cmn.Transaction{
 		PaymentSysID: req.SystemID,
 		AccountID:    req.TargetAccountID,
 		Amount:       req.Amount,
 	}
-	vIn, errvIn := txIn.MsgValue()
-	kIn, errkIn := txIn.MsgKey()
+	kIn, errkIn := cmn.ToBytes(txIn.AccountID)
+	vIn, errvIn := cmn.ToBytes(txIn)
 
 	if errvOut != nil || errkOut != nil || errvIn != nil || errkIn != nil {
 		sendPaymentFailed(req, "processing error", env)
+		return
 	}
 
 	err := env.writer.WriteMessages(env.CancelCtx(),
