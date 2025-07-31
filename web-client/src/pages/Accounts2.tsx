@@ -152,7 +152,7 @@ const UserDashboard = () => {
       body: JSON.stringify({
         sourceAccountId: parseInt(transferFrom),
         targetAccountId: parseInt(transferTo),
-        appId: Date.now().toString(),
+        appId: crypto.randomUUID(),
         amount: amount,
       }),
     });

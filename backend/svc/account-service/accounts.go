@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -13,6 +14,10 @@ import (
 	"github.com/segmentio/kafka-go"
 	cmn "github.com/timkins666/distributed-playground/backend/pkg/common"
 )
+
+func init() {
+	gob.Register(cmn.Transaction{})
+}
 
 var (
 	banks []*cmn.Bank = []*cmn.Bank{{Name: "Bonzo", ID: 1}} // tmp
@@ -51,18 +56,18 @@ func main() {
 	mux.HandleFunc("/myaccounts", getUserAccountsHandler)
 	mux.HandleFunc("/new", createUserAccountHandler)
 
-	go paymentValidator(env)
+	go paymentValidator(&env)
 
 	port := ":" + os.Getenv("SERVE_PORT")
 	env.Logger().Printf("Accounts service running on %s", port)
 	log.Fatal(http.ListenAndServe(port,
 		cmn.SetUserIDMiddlewareHandler(
 			cmn.SetContextValuesMiddleware(
-				map[cmn.ContextKey]any{cmn.EnvKey: env})(mux))))
+				map[cmn.ContextKey]any{cmn.EnvKey: &env})(mux))))
 }
 
 func getAllBanksHandler(w http.ResponseWriter, r *http.Request) {
-	env, _ := r.Context().Value(cmn.EnvKey).(appEnv)
+	env, _ := r.Context().Value(cmn.EnvKey).(*appEnv)
 	userID, ok := r.Context().Value(cmn.UserIDKey).(int32)
 
 	if userID == 0 || !ok {
@@ -83,7 +88,7 @@ func getAllBanksHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func getUserAccountsHandler(w http.ResponseWriter, r *http.Request) {
-	env, _ := r.Context().Value(cmn.EnvKey).(appEnv)
+	env, _ := r.Context().Value(cmn.EnvKey).(*appEnv)
 	userID, _ := r.Context().Value(cmn.UserIDKey).(int32)
 
 	if userID == 0 {
@@ -114,8 +119,9 @@ type newAccountRequest struct {
 	InitialBalance       int64  `json:"initialBalance"`
 }
 
+// quick implementation for now
 func createUserAccountHandler(w http.ResponseWriter, r *http.Request) {
-	env, _ := r.Context().Value(cmn.EnvKey).(appEnv)
+	env, _ := r.Context().Value(cmn.EnvKey).(*appEnv)
 	userID, _ := r.Context().Value(cmn.UserIDKey).(int32)
 
 	var req *newAccountRequest
@@ -182,28 +188,35 @@ func createUserAccountHandler(w http.ResponseWriter, r *http.Request) {
 	env.Logger().Println("Opened new account", newAccount)
 
 	respAccounts := []cmn.Account{newAccount}
-
-	txJson, _ := json.Marshal(cmn.Transaction{
-		TxID:      uuid.NewString(),
-		Amount:    newAccount.Balance,
-		AccountID: newAccount.AccountID,
+	payId := uuid.NewString()
+	txKey, _ := cmn.ToBytes(newAccount.AccountID)
+	txMsg, _ := cmn.ToBytes(cmn.Transaction{
+		TxID:         uuid.NewString(),
+		Amount:       newAccount.Balance,
+		AccountID:    newAccount.AccountID,
+		PaymentSysID: payId,
 	})
+
 	env.Writer().WriteMessages(env.CancelCtx(),
 		kafka.Message{
 			Topic: cmn.Topics.TransactionRequested().S(),
-			Value: txJson,
+			Key:   txKey,
+			Value: txMsg,
 		})
 
 	if sourceAcc != nil {
-		txJson, _ := json.Marshal(cmn.Transaction{
-			TxID:      uuid.NewString(),
-			Amount:    -newAccount.Balance,
-			AccountID: req.SourceFundsAccountID,
+		txKey, _ := cmn.ToBytes(req.SourceFundsAccountID)
+		txMsg, _ := json.Marshal(cmn.Transaction{
+			TxID:         uuid.NewString(),
+			Amount:       -newAccount.Balance,
+			AccountID:    req.SourceFundsAccountID,
+			PaymentSysID: payId,
 		})
 		env.Writer().WriteMessages(env.CancelCtx(),
 			kafka.Message{
 				Topic: cmn.Topics.TransactionRequested().S(),
-				Value: txJson,
+				Key:   txKey,
+				Value: txMsg,
 			})
 		sourceAcc.Balance -= req.InitialBalance
 		respAccounts = append(respAccounts, *sourceAcc)

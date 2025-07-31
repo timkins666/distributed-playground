@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math/rand/v2"
 	"strings"
@@ -45,14 +44,14 @@ type paymentMsg struct {
 }
 
 func (pm *paymentMsg) FromReq(req *cmn.PaymentRequest) *paymentMsg {
-	pm.AccountID = int32(req.SourceAccountID)
+	pm.AccountID = req.SourceAccountID
 	pm.AppID = req.AppID
 	pm.SystemID = req.SystemID
 	return pm
 }
 
 // handles validation of requested payments
-func paymentValidator(env appEnv) {
+func paymentValidator(env *appEnv) {
 	max_errors := 10
 	for {
 		select {
@@ -75,23 +74,27 @@ func paymentValidator(env appEnv) {
 	}
 }
 
-func handlePaymentRequestedMessage(message kafka.Message, env appEnv) {
-	var req cmn.PaymentRequest
-	err := json.Unmarshal(message.Value, &req)
+func handlePaymentRequestedMessage(message kafka.Message, env *appEnv) {
+	req, err := cmn.FromBytes[cmn.PaymentRequest](message.Value)
 	if err != nil {
 		env.Logger().Println("ERROR failed to parse message:", err)
 		return
 	}
 	env.Logger().Println("Read message: ", req)
 
+	if !req.Valid() {
+		env.Logger().Println("Message is not valid")
+		return
+	}
+
 	validateResult := &paymentValidationResult{
-		paymentRequest: &req,
+		paymentRequest: req,
 	}
 
 	numChecks := 2 // being lazy
 	results := make(chan checkResult, numChecks)
-	go checkBalance(&req, results, env)
-	go checkTargetAccount(&req, results, env)
+	go checkBalance(req, results, env)
+	go checkTargetAccount(req, results, env)
 
 	for {
 		select {
@@ -117,7 +120,7 @@ func handlePaymentRequestedMessage(message kafka.Message, env appEnv) {
 	}
 }
 
-func handleResults(result *paymentValidationResult, env appEnv) {
+func handleResults(result *paymentValidationResult, env *appEnv) {
 	if result.timedOut {
 		sendPaymentFailed(result.paymentRequest, "timeout", env)
 		return
@@ -140,7 +143,7 @@ func handleResults(result *paymentValidationResult, env appEnv) {
 }
 
 // sends a message to the payment failed topic
-func sendPaymentFailed(req *cmn.PaymentRequest, reason string, env appEnv) {
+func sendPaymentFailed(req *cmn.PaymentRequest, reason string, env *appEnv) {
 	env.Logger().Printf("Payment of £%d failed for account %d: %s", req.Amount, req.TargetAccountID, reason)
 	msg := (&paymentMsg{Type: paymentFailed, Reason: reason}).FromReq(req)
 
@@ -165,7 +168,7 @@ func sendPaymentFailed(req *cmn.PaymentRequest, reason string, env appEnv) {
 }
 
 // send message(s) for transaction service
-func initiateTransaction(req *cmn.PaymentRequest, env appEnv) {
+func initiateTransaction(req *cmn.PaymentRequest, env *appEnv) {
 	env.Logger().Printf("Initiate transaction of £%d from account %d to account %d", req.Amount, req.SourceAccountID, req.TargetAccountID)
 
 	txOut := cmn.Transaction{
@@ -209,46 +212,46 @@ func initiateTransaction(req *cmn.PaymentRequest, env appEnv) {
 }
 
 // check source account has required funds
-func checkBalance(req *cmn.PaymentRequest, chn chan<- checkResult, env appEnv) {
+func checkBalance(req *cmn.PaymentRequest, chn chan<- checkResult, env *appEnv) {
 	// artificial delay
 	sleep := rand.N(5000)
 	env.Logger().Printf("%s sleeping for %d", balanceCheck, sleep)
 	time.Sleep(time.Duration(sleep) * time.Millisecond)
 
-	result := checkResult{checkName: balanceCheck}
+	res := checkResult{checkName: balanceCheck}
 
 	srcAcc, err := env.DB().GetAccountByID(req.SourceAccountID)
 
 	if err != nil {
 		env.Logger().Printf("ERROR: Account id %d not found. %s", req.SourceAccountID, err)
-		result.result = false // TODO: unneccessary cos default but wait for tests
-		chn <- result
+		res.result = false // TODO: unneccessary cos default but wait for tests
+		chn <- res
 		return
 	}
 
 	env.Logger().Printf("Account %d current balance £%d, requested payment of £%d", srcAcc.AccountID, srcAcc.Balance, req.Amount)
-	result.result = srcAcc.Balance >= req.Amount
-	chn <- result
+	res.result = srcAcc.Balance >= req.Amount
+	chn <- res
 }
 
 // check target account exists
-func checkTargetAccount(req *cmn.PaymentRequest, chn chan<- checkResult, env appEnv) {
+func checkTargetAccount(req *cmn.PaymentRequest, chn chan<- checkResult, env *appEnv) {
 	// artificial delay
 	sleep := rand.N(5000)
 	env.Logger().Printf("%s sleeping for %d", targetAccount, sleep)
 	time.Sleep(time.Duration(sleep) * time.Millisecond)
 
-	result := checkResult{checkName: targetAccount}
+	res := checkResult{checkName: targetAccount}
 
 	_, err := env.DB().GetAccountByID(req.SourceAccountID)
 
 	if err != nil {
 		env.Logger().Printf("ERROR: Target account id %d not found. %s", req.TargetAccountID, err)
-		result.result = false // TODO: unneccessary cos default but wait for tests
-		chn <- result
+		res.result = false // TODO: unneccessary cos default but wait for tests
+		chn <- res
 		return
 	}
 
-	result.result = true
-	chn <- result
+	res.result = true
+	chn <- res
 }

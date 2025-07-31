@@ -48,6 +48,11 @@ services:
       PAYMENT_SERVICE_HOST: http://payment-service:$ACCOUNT_PORT
       FRONTEND_HOST: localhost:$FRONTEND_PORT
       KAFKA_BROKER: $KAFKA_BROKER
+    depends_on:
+      postgres-init:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
     ports:
       # - 4000:4000
       - 8080:$GATEWAY_PORT
@@ -62,6 +67,8 @@ services:
         SERVICE_NAME: auth-service
     depends_on:
       postgres-init:
+        condition: service_completed_successfully
+      kafka-init:
         condition: service_completed_successfully
     environment:
       SERVE_PORT: $AUTH_PORT
@@ -82,6 +89,11 @@ services:
       SERVE_PORT: $ACCOUNT_PORT
       KAFKA_BROKER: $KAFKA_BROKER
       POSTGRES_HOST: $POSTGRES_HOST
+    depends_on:
+      postgres-init:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
     ports:
       - 4000:4000
 
@@ -93,9 +105,15 @@ services:
       args:
         GO_VERSION: $GO_VERSION
         SERVICE_NAME: payment-service
+    depends_on:
+      postgres-init:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
     environment:
       SERVE_PORT: $PAYMENT_PORT
       KAFKA_BROKER: $KAFKA_BROKER
+      POSTGRES_HOST: $POSTGRES_HOST
 
   transaction-service:
     container_name: transaction-service
@@ -105,6 +123,11 @@ services:
       args:
         GO_VERSION: $GO_VERSION
         SERVICE_NAME: transaction-service
+    depends_on:
+      postgres-init:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
     environment:
       KAFKA_BROKER: $KAFKA_BROKER
       POSTGRES_HOST: $POSTGRES_HOST

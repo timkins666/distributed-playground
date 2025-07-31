@@ -1,5 +1,6 @@
 import { createSlice } from "@reduxjs/toolkit";
 import { AccountsState, State } from "../../store";
+import { Account } from "./account";
 
 export const accountsSlice = createSlice({
   name: "userAccounts",
@@ -15,11 +16,16 @@ export const accountsSlice = createSlice({
       state.accounts = newValue.payload;
     },
     updateAccounts: (state, newValue) => {
-      const updateIds = newValue.payload.map((acc) => acc.accountId);
-      state.accounts = [
-        ...state.accounts.filter((acc) => !updateIds.includes(acc.accountId)),
-        ...newValue.payload,
-      ].sort((a, b) => a.accountId - b.accountId);
+      // MIBL
+      newValue.payload.forEach((upd: Account) => {
+        const idx = state.accounts.findIndex(acc => acc.accountId === upd.accountId)
+        if (idx === -1) {
+          state.accounts.push(upd)
+        } else {
+          state.accounts[idx].balance = upd.balance
+        }
+      });
+      state.accounts = state.accounts.sort((a, b) => a.accountId - b.accountId);
     },
   },
 });

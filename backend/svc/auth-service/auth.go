@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	cmn "github.com/timkins666/distributed-playground/backend/pkg/common"
 )
@@ -20,9 +19,6 @@ type env struct {
 func main() {
 	cancelCtx, stop := cmn.GetCancelContext()
 	defer stop()
-
-	log.Println("sleep for debug connect time")
-	time.Sleep(10 * time.Second)
 
 	db, err := cmn.InitDB(cmn.DefaultConfig)
 

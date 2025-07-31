@@ -102,7 +102,7 @@ func (db *DB) CreatePayment(pr *PaymentRequest) error {
 		amount,
 		status
 		)
-		VALUES ($1, $2, $3, $4, $5, "PENDING")
+		VALUES ($1, $2, $3, $4, $5, 'PENDING')
 		`, pr.SystemID, pr.AppID, pr.SourceAccountID, pr.TargetAccountID, pr.Amount)
 
 	return err
@@ -210,10 +210,10 @@ func (db *DB) GetAccountByID(accountID int32) (*Account, error) {
 func (db *DB) CreateAccount(a Account) (int32, error) {
 	var newAccID int32
 	err := db.db.QueryRow(`
-		INSERT INTO accounts.account (user_id, name, balance)
-		VALUES ($1, $2, $3)
+		INSERT INTO accounts.account (user_id, name)
+		VALUES ($1, $2)
 		RETURNING id
-		`, a.UserID, a.Name, a.Balance).Scan(&newAccID)
+		`, a.UserID, a.Name).Scan(&newAccID)
 	return newAccID, err
 }
 
@@ -246,25 +246,27 @@ func (db *DB) CommitTransaction(transaction *Transaction) error {
 	var balance int64
 	// FOR UPDATE = pessimistic lock
 	err = tx.QueryRow(`
-        SELECT balance FROM accounts WHERE id = $1 FOR UPDATE
+        SELECT balance FROM accounts.account WHERE id = $1 FOR UPDATE
     `, transaction.AccountID).Scan(&balance)
 	if err != nil {
-		log.Printf("account not found: %+v", transaction)
+		log.Printf("account not found for transaction %+v\n%s", transaction, err)
 		return ErrAccountNotExist
 	}
 
 	newBalance := balance + transaction.Amount
 	_, err = tx.Exec(`
-        UPDATE accounts SET balance = $1 WHERE id = $2
-    `, newBalance, transaction.AccountID)
+        UPDATE accounts.account SET balance = $1 WHERE id = $2
+		`, newBalance, transaction.AccountID)
 	if err != nil {
+		log.Println("err update")
 		return err
 	}
 
 	_, err = tx.Exec(`
-        INSERT INTO transactions (id, account_id, amount) VALUES ($1, $2, $3)
-    `, transaction.TxID, transaction.AccountID, transaction.Amount)
+        INSERT INTO transactions.transaction (id, account_id, kafka_id, amount) VALUES ($1, $2, $3, $4)
+    `, transaction.TxID, transaction.AccountID, transaction.KafkaID, transaction.Amount)
 	if err != nil {
+		log.Println("err insert into")
 		return err
 	}
 

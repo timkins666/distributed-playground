@@ -69,7 +69,7 @@ func TestProcessMessage(t *testing.T) {
 
 			msg := kafka.Message{Value: msgValue}
 
-			gotErr := processMessage(msg, env)
+			gotErr := processMessage(msg, &env)
 
 			assert.Equal(t, tt.wantErr, gotErr)
 

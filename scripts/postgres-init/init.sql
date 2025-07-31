@@ -6,8 +6,8 @@ CREATE SCHEMA IF NOT EXISTS transactions;
 
 CREATE TABLE IF NOT EXISTS transactions.transaction (
     id UUID PRIMARY KEY,
-    kafka_id UUID NOT NULL,
-    account_id UUID NOT NULL,
+    kafka_id TEXT NOT NULL,
+    account_id INT NOT NULL,
     amount INT NOT NULL,
     created_at TIMESTAMP DEFAULT now()
 );

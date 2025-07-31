@@ -1,13 +1,19 @@
 package main
 
 import (
+	"encoding/gob"
 	"errors"
+	"fmt"
 	"log"
 
 	"github.com/google/uuid"
 	"github.com/segmentio/kafka-go"
 	cmn "github.com/timkins666/distributed-playground/backend/pkg/common"
 )
+
+func init() {
+	gob.Register(cmn.Transaction{})
+}
 
 type appEnv struct {
 	cmn.BaseEnv
@@ -53,7 +59,7 @@ func main() {
 				env.Logger().Println(err)
 				continue
 			}
-			processMessage(msg, env)
+			processMessage(msg, &env)
 		}
 	}
 }
@@ -64,9 +70,8 @@ var (
 	errorCommittingTransaction = errors.New("error committing transaction, this is probably bad")
 )
 
-func processMessage(msg kafka.Message, env appEnv) error {
+func processMessage(msg kafka.Message, env *appEnv) error {
 	tx, err := cmn.FromBytes[cmn.Transaction](msg.Value)
-
 	if err != nil {
 		env.Logger().Println(err)
 		env.Logger().Printf("received bytes:\n%s", msg.Value)
@@ -74,11 +79,12 @@ func processMessage(msg kafka.Message, env appEnv) error {
 	}
 
 	if !tx.Valid() {
-		env.Logger().Println(errorInvalidTransaction)
+		env.Logger().Printf("%s:%+v", errorInvalidTransaction, tx)
 		return errorInvalidTransaction
 	}
 
 	tx.TxID = uuid.NewString()
+	tx.KafkaID = fmt.Sprintf("%s:%d:%d", msg.Topic, msg.Partition, msg.Offset)
 
 	err = env.DB().CommitTransaction(tx)
 	if err != nil {
@@ -91,7 +97,7 @@ func processMessage(msg kafka.Message, env appEnv) error {
 	return nil
 }
 
-// func commitToDB(transaction *cmn.Transaction, env appEnv) error {
+// func commitToDB(transaction *cmn.Transaction, env *appEnv) error {
 // 	tx, err := env.DB().Expose().Begin()
 // 	if err != nil {
 // 		return err

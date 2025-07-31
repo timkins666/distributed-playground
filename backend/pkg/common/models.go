@@ -1,8 +1,6 @@
 package common
 
 import (
-	"bytes"
-	"encoding/gob"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -43,24 +41,12 @@ func (pr *PaymentRequest) Valid() bool {
 		pr.Timestamp.After(time.Now().Add(-10*time.Second))
 }
 
-func FromBytes[T any](b []byte) (*T, error) {
-	var t T
-	buf := bytes.NewBuffer(b)
-	err := gob.NewDecoder(buf).Decode(&t)
-	return &t, err
-}
-
-func ToBytes[T any](t T) ([]byte, error) {
-	buf := new(bytes.Buffer)
-	err := gob.NewEncoder(buf).Encode(t)
-	return buf.Bytes(), err
-}
-
 type Transaction struct {
 	TxID         string
 	PaymentSysID string
 	Amount       int64
 	AccountID    int32
+	KafkaID      string
 }
 
 func (t *Transaction) Valid() bool {

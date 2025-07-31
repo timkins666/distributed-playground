@@ -85,7 +85,7 @@ func TestHandleResultsFailedChecks(t *testing.T) {
 			// reset messages
 			writer.Messages = []kafka.Message{}
 
-			handleResults(tt.res, env)
+			handleResults(tt.res, &env)
 
 			assert.Equal(t, len(writer.Messages), 1)
 			assert.Equal(t, writer.Messages[0].Topic, tt.wantTopic.S())
@@ -144,7 +144,7 @@ func TestHandleResultsChecksPassed(t *testing.T) {
 			// reset messages
 			writer.Messages = []kafka.Message{}
 
-			handleResults(tt.res, env)
+			handleResults(tt.res, &env)
 
 			assert.Equal(t, len(writer.Messages), 2)
 			m1 := writer.Messages[0]

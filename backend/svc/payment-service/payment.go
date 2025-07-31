@@ -26,8 +26,15 @@ func main() {
 
 	cancelCtx, stop := cmn.GetCancelContext()
 	defer stop()
+
+	db, err := cmn.InitDB(cmn.DefaultConfig)
+	if err != nil {
+		log.Panicln(err.Error())
+	}
+
 	env := appEnv{
-		BaseEnv: cmn.BaseEnv{}.WithCancelCtx(cancelCtx),
+		BaseEnv: cmn.BaseEnv{}.WithCancelCtx(cancelCtx).WithDB(db),
+		writer:  writer,
 	}
 
 	mux := http.NewServeMux()
@@ -38,15 +45,16 @@ func main() {
 	log.Fatal(http.ListenAndServe(port,
 		cmn.SetUserIDMiddlewareHandler(
 			cmn.SetContextValuesMiddleware(
-				map[cmn.ContextKey]any{cmn.EnvKey: env})(mux))))
+				map[cmn.ContextKey]any{cmn.EnvKey: &env})(mux))))
 }
 
 // handles initial transfer request from gateway
 func handlePaymentRequest(w http.ResponseWriter, r *http.Request) {
-	env, ok := r.Context().Value(cmn.EnvKey).(appEnv)
+	env, ok := r.Context().Value(cmn.EnvKey).(*appEnv)
 	if !ok {
 		log.Println("invalid env")
 		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
 	var req cmn.PaymentRequest
@@ -96,7 +104,7 @@ func handlePaymentRequest(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 }
 
-func createDBPayment(req cmn.PaymentRequest, env appEnv) error {
+func createDBPayment(req cmn.PaymentRequest, env *appEnv) error {
 	log.Printf("saving payment to db: %+v", req)
 	return env.DB().CreatePayment(&req)
 }
