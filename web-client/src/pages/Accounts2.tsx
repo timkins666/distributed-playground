@@ -1,3 +1,4 @@
+import { CurrencyPound } from "@mui/icons-material";
 import {
   Box,
   Button,
@@ -9,8 +10,10 @@ import {
   DialogTitle,
   FormControl,
   Grid,
+  InputAdornment,
   InputLabel,
   MenuItem,
+  OutlinedInput,
   Paper,
   Select,
   TextField,
@@ -54,7 +57,6 @@ const UserDashboard = () => {
   const authStatus = useSelector(authSelector);
   const bankState = useSelector(banksSelector);
   const userAccountState = useSelector(userAccountsSelector);
-  const accounts = userAccountState.accounts;
 
   useEffect(() => {
     if (bankState.triedLoad) {
@@ -104,17 +106,17 @@ const UserDashboard = () => {
   const [newAccountInitialBalance, setNewAccountInitialBalance] = useState("");
   const [newAccountName, setNewAccountName] = useState("");
 
-  const [transferFrom, setTransferFrom] = useState("");
-  const [transferTo, setTransferTo] = useState("");
+  const [transferFrom, setTransferFrom] = useState<string | number>("");
+  const [transferTo, setTransferTo] = useState<string | number>("");
   const [transferAmount, setTransferAmount] = useState("");
 
   const handleCreateAccount = async () => {
-    let initialBalance:number | null = 0
+    let initialBalance: number | null = 0;
     if (userAccountState.accounts.length > 0) {
-        initialBalance=verifyAndConvertAmount(newAccountInitialBalance);
-        if (initialBalance === null) {
-            return
-        }
+      initialBalance = verifyAndConvertAmount(newAccountInitialBalance);
+      if (initialBalance === null) {
+        return;
+      }
     }
 
     const res = await fetch(gatewayUrl("account", "new"), {
@@ -129,18 +131,20 @@ const UserDashboard = () => {
         initialBalance: initialBalance,
       }),
     });
-    const data = await res.json();
-    if (res.status === 200) {
-        dispatch(updateAccounts(data));
-        setCreateOpen(false);
-        setNewAccountName("")
+    if (res.ok) {
+      const data = await res.json();
+      dispatch(updateAccounts(data));
+      setCreateOpen(false);
+      setNewAccountName("");
     }
+    // TODO: error handling
+    console.error("error creating account", res.text());
   };
 
   const handleTransfer = async () => {
-    const amount = verifyAndConvertAmount(transferAmount)
+    const amount = verifyAndConvertAmount(transferAmount);
     if (!amount) {
-        return
+      return;
     }
 
     const res = await fetch(gatewayUrl("payment", "transfer"), {
@@ -150,29 +154,41 @@ const UserDashboard = () => {
         Authorization: `Bearer ${authStatus.token}`,
       },
       body: JSON.stringify({
-        sourceAccountId: parseInt(transferFrom),
-        targetAccountId: parseInt(transferTo),
+        sourceAccountId: transferFrom,
+        targetAccountId: transferTo,
         appId: crypto.randomUUID(),
         amount: amount,
       }),
     });
-    const success = res.status === 202;
-    console.log("success: ", success);
+
+    if (res.ok) {
+      setAccounts(
+        userAccountState.accounts.map((acc) => {
+          if (acc.accountId.toString() === transferFrom) {
+            acc.balance -= amount;
+          }
+          if (acc.accountId.toString() === transferTo) {
+            acc.balance += amount;
+          }
+          return acc;
+        })
+      );
+    }
   };
 
   return (
     <Box sx={{ padding: 4 }}>
-      <Typography variant="h4" gutterBottom>
+      <Typography variant='h4' gutterBottom>
         My Accounts
       </Typography>
 
       <Grid container spacing={2} mb={4}>
-        {accounts.map((account) => (
+        {userAccountState.accounts.map((account) => (
           <Grid size={{ xs: 12, md: 6, lg: 4 }} key={account.accountId}>
-            <Card variant="outlined">
+            <Card variant='outlined'>
               <CardContent>
-                <Typography variant="h6">{account.name}</Typography>
-                <Typography color="text.secondary">
+                <Typography variant='h6'>{account.name}</Typography>
+                <Typography color='text.secondary'>
                   Balance: £{account.balance / 100}
                 </Typography>
               </CardContent>
@@ -182,7 +198,7 @@ const UserDashboard = () => {
       </Grid>
 
       <Button
-        variant="contained"
+        variant='contained'
         onClick={() => setCreateOpen(true)}
         sx={{ mb: 4 }}
       >
@@ -190,21 +206,21 @@ const UserDashboard = () => {
       </Button>
 
       {/* Transfer Section */}
-      {accounts.length >= 2 && (
+      {userAccountState.accounts.length >= 2 && (
         <Paper elevation={3} sx={{ p: 3, maxWidth: 600 }}>
-          <Typography variant="h6" gutterBottom>
+          <Typography variant='h6' gutterBottom>
             Transfer Between Accounts
           </Typography>
-          <Grid container spacing={2} alignItems="center">
+          <Grid container spacing={2} alignItems='center'>
             <Grid size={{ xs: 12, sm: 6 }}>
               <FormControl fullWidth>
                 <InputLabel>From</InputLabel>
                 <Select
                   value={transferFrom}
-                  label="From"
+                  label='From'
                   onChange={(e) => setTransferFrom(e.target.value)}
                 >
-                  {accounts.map((acc) => (
+                  {userAccountState.accounts.map((acc) => (
                     <MenuItem key={acc.accountId} value={acc.accountId}>
                       {acc.name}
                     </MenuItem>
@@ -217,10 +233,10 @@ const UserDashboard = () => {
                 <InputLabel>To</InputLabel>
                 <Select
                   value={transferTo}
-                  label="To"
+                  label='To'
                   onChange={(e) => setTransferTo(e.target.value)}
                 >
-                  {accounts.map((acc) => (
+                  {userAccountState.accounts.map((acc) => (
                     <MenuItem key={acc.accountId} value={acc.accountId}>
                       {acc.name}
                     </MenuItem>
@@ -229,16 +245,32 @@ const UserDashboard = () => {
               </FormControl>
             </Grid>
             <Grid size={{ xs: 12 }}>
-              <TextField
+              <OutlinedInput
                 fullWidth
-                label="Amount"
-                type="number"
+                label='Amount'
+                type='number'
                 value={transferAmount}
                 onChange={(e) => setTransferAmount(e.target.value)}
+                notched={false}
+                startAdornment={
+                  <InputAdornment position='start'>
+                    <CurrencyPound />
+                  </InputAdornment>
+                }
               />
             </Grid>
             <Grid size={{ xs: 12 }}>
-              <Button variant="contained" fullWidth onClick={handleTransfer}>
+              <Button
+                variant='contained'
+                fullWidth
+                onClick={handleTransfer}
+                disabled={
+                  !transferAmount ||
+                  !transferTo ||
+                  !transferFrom ||
+                  transferFrom === transferTo
+                }
+              >
                 Transfer
               </Button>
             </Grid>
@@ -250,7 +282,7 @@ const UserDashboard = () => {
       <Dialog
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        maxWidth="sm"
+        maxWidth='sm'
         fullWidth
       >
         <DialogTitle>Create New Account</DialogTitle>
@@ -264,16 +296,16 @@ const UserDashboard = () => {
               onChange={(e) => setNewAccountName(e.target.value)}
             />
           </FormControl>
-          {accounts.length > 0 ? (
+          {userAccountState.accounts.length > 0 ? (
             <>
               <FormControl fullWidth sx={{ mt: 2 }}>
                 <InputLabel>Transfer initial balance from</InputLabel>
                 <Select
                   value={newAccountSourceId}
-                  label="Transfer From"
+                  label='Transfer From'
                   onChange={(e) => setNewAccountSourceId(e.target.value)}
                 >
-                  {accounts.map((acc) => (
+                  {userAccountState.accounts.map((acc) => (
                     <MenuItem key={acc.accountId} value={acc.accountId}>
                       {acc.name}
                     </MenuItem>
@@ -282,8 +314,8 @@ const UserDashboard = () => {
               </FormControl>
               <TextField
                 fullWidth
-                label="Initial Balance"
-                type="number"
+                label='Initial Balance'
+                type='number'
                 sx={{ mt: 2 }}
                 value={newAccountInitialBalance}
                 onChange={(e) => setNewAccountInitialBalance(e.target.value)}
@@ -298,7 +330,7 @@ const UserDashboard = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setCreateOpen(false)}>Cancel</Button>
-          <Button onClick={handleCreateAccount} variant="contained">
+          <Button onClick={handleCreateAccount} variant='contained'>
             Create
           </Button>
         </DialogActions>

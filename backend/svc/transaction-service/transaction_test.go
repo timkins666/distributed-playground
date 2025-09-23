@@ -50,6 +50,7 @@ func TestProcessMessage(t *testing.T) {
 				PaymentSysID: "123",
 				Amount:       123456,
 				AccountID:    42,
+				KafkaID:      "TestTopic:11:12",
 			},
 			wantErr: nil,
 		},
@@ -67,7 +68,7 @@ func TestProcessMessage(t *testing.T) {
 				}
 			}
 
-			msg := kafka.Message{Value: msgValue}
+			msg := kafka.Message{Value: msgValue, Topic: "TestTopic", Partition: 11, Offset: 12}
 
 			gotErr := processMessage(msg, &env)
 
