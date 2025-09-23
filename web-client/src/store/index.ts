@@ -1,9 +1,8 @@
 import { configureStore } from '@reduxjs/toolkit'
-import authReducer from './components/auth/authSlice'
-import banksReducer from './components/banks/banksSlice'
-import userAccountsReducer from './components/accounts/accountsSlice'
-import { Bank } from './components/banks/bank'
-import { Account } from './components/accounts/account'
+import { Account, Bank, UserCreds } from '../types'
+import userAccountsReducer from './accountsSlice'
+import authReducer from './authSlice'
+import banksReducer from './banksSlice'
 
 export default configureStore({
   reducer: {
@@ -19,12 +18,8 @@ export interface State {
   userAccounts: AccountsState
 }
 
-export interface AuthState {
+export interface AuthState extends UserCreds {
   loggedIn: boolean
-  username: string | null
-  roles: string[] | null
-  token: string | null
-  loginTime?: number | null
 }
 
 export interface BankState {

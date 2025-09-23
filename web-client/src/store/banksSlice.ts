@@ -1,5 +1,5 @@
 import { createSlice } from "@reduxjs/toolkit";
-import { BankState, State } from "../../store";
+import { BankState, State } from "./index";
 
 export const banksSlice = createSlice({
   name: "banks",

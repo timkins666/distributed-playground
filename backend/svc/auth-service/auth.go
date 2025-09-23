@@ -71,7 +71,11 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]any{"username": user.Username, "roles": user.Roles, "token": token})
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"username": user.Username,
+		"roles":    user.Roles,
+		"token":    token,
+	})
 }
 
 func createUser(username string, app env) (cmn.User, error) {

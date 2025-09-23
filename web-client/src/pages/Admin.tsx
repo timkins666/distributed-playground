@@ -1,5 +1,5 @@
 import { useSelector } from "react-redux";
-import { authSelector } from "../components/auth/authSlice";
+import { authSelector } from "../store/authSlice";
 import { gatewayUrl } from "../conf";
 
 export default function Admin() {

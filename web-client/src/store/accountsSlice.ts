@@ -1,6 +1,6 @@
 import { createSlice } from "@reduxjs/toolkit";
-import { AccountsState, State } from "../../store";
-import { Account } from "./account";
+import { AccountsState, State } from "./index";
+import { Account } from "../types";
 
 export const accountsSlice = createSlice({
   name: "userAccounts",
@@ -16,7 +16,6 @@ export const accountsSlice = createSlice({
       state.accounts = newValue.payload;
     },
     updateAccounts: (state, newValue) => {
-      // MIBL
       newValue.payload.forEach((upd: Account) => {
         const idx = state.accounts.findIndex(acc => acc.accountId === upd.accountId)
         if (idx === -1) {

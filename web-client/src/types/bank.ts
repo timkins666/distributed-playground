@@ -1,4 +1,4 @@
 export interface Bank {
+  bankId: number;
   name: string;
-  id: number;
 }

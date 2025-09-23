@@ -2,7 +2,7 @@ import { JSX } from "react";
 import { useSelector } from "react-redux";
 
 import { Navigate, useLocation } from "react-router";
-import { authSelector } from "./authSlice";
+import { authSelector } from "../../store/authSlice";
 
 function RequireAuth({
   requiredRoles = null,

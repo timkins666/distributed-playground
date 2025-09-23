@@ -1,21 +1,31 @@
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import { Button, Input } from "@mui/material";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Navigate } from "react-router";
-import { authSelector, setLogin } from "../components/auth/authSlice";
 import { gatewayHost } from "../conf";
+import { authSelector, login } from "../store/authSlice";
+import { getLocalStorageLogin, setLocalStorageLogin } from "../utils/auth";
 
 export default function Login() {
   const [loginFailed, setLoginFailed] = useState(false);
   const [username, setUsername] = useState("");
-  const dispatch = useDispatch();
   const loggedIn = useSelector(authSelector).loggedIn;
+  const dispatch = useDispatch();
+
+
+  useEffect(() => {
+    const sessionCreds = getLocalStorageLogin();
+    if (!loggedIn && sessionCreds) {
+      dispatch(login(sessionCreds));
+    }
+  }, [])
+
 
   if (loggedIn) {
-    return <Navigate to="/accounts"></Navigate>;
+    return <Navigate to='/accounts'></Navigate>;
   }
-
+  
   const doLogin = async () => {
     const res = await fetch(`${gatewayHost}/login`, {
       method: "POST",
@@ -23,19 +33,14 @@ export default function Login() {
       body: JSON.stringify({ username, password: "test" }),
     });
 
-    if (res.status !== 200) {
+    if (!res.ok) {
       setLoginFailed(true);
       return;
     }
 
-    const data = await res.json();
-    dispatch(
-      setLogin({
-        username: data.username,
-        roles: data.roles,
-        token: data.token,
-      })
-    );
+    const creds = await res.json()
+    setLocalStorageLogin(creds)
+    dispatch(login(creds));
   };
 
   return (

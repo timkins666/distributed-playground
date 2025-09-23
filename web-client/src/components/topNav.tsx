@@ -1,6 +1,6 @@
 import { useSelector } from "react-redux";
 import { Link } from "react-router";
-import { authSelector } from "./auth/authSlice";
+import { authSelector } from "../store/authSlice";
 
 import { Button, ButtonGroup } from "@mui/material";
 

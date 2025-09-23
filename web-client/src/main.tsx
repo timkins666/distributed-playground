@@ -15,7 +15,7 @@ import CssBaseline from "@mui/material/CssBaseline";
 import Logout from "./pages/Logout";
 
 import { ThemeProvider, createTheme } from "@mui/material/styles";
-import Accounts2 from "./pages/Accounts2";
+import AccountsPage from "./pages/AccountsPage";
 
 const theme = createTheme({ palette: { mode: "light" } }); // or 'dark'
 
@@ -34,7 +34,7 @@ createRoot(document.getElementById("root")!).render(
                   path="/accounts"
                   element={
                     <RequireAuth>
-                      <Accounts2 />
+                      <AccountsPage />
                     </RequireAuth>
                   }
                 />

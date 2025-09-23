@@ -109,7 +109,8 @@ func CreateUserToken(user User) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256,
 		jwt.MapClaims{
 			"sub": strconv.Itoa(int(user.ID)),
-			"iat": time.Now().Unix(),
+			"iat": time.Now().UTC().Unix(),
+			"exp": time.Now().UTC().Add(15 * time.Minute).Unix(),
 		})
 
 	tokenString, err := token.SignedString(secretKey)
