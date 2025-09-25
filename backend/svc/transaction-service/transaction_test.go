@@ -7,15 +7,13 @@ import (
 	"github.com/bmizerany/assert"
 	"github.com/segmentio/kafka-go"
 	cmn "github.com/timkins666/distributed-playground/backend/pkg/common"
-	tu "github.com/timkins666/distributed-playground/backend/pkg/testutils"
 )
 
 type MockDB struct {
-	tu.BaseTestDB
 	transactions []*cmn.Transaction
 }
 
-func (m *MockDB) CommitTransaction(transaction *cmn.Transaction) error {
+func (m *MockDB) commitTransaction(transaction *cmn.Transaction) error {
 	m.transactions = append(m.transactions, transaction)
 	return nil
 }
@@ -23,8 +21,10 @@ func (m *MockDB) CommitTransaction(transaction *cmn.Transaction) error {
 func TestProcessMessage(t *testing.T) {
 	mockDB := MockDB{}
 
-	env := appEnv{
-		BaseEnv: cmn.BaseEnv{}.WithCancelCtx(context.Background()).WithDB(&mockDB),
+	appCtx := transactionCtx{
+		cancelCtx: context.Background(),
+		logger:    cmn.AppLogger(),
+		db:        &mockDB,
 	}
 
 	tests := []struct {
@@ -70,7 +70,7 @@ func TestProcessMessage(t *testing.T) {
 
 			msg := kafka.Message{Value: msgValue, Topic: "TestTopic", Partition: 11, Offset: 12}
 
-			gotErr := processMessage(msg, &env)
+			gotErr := processMessage(msg, &appCtx)
 
 			assert.Equal(t, tt.wantErr, gotErr)
 

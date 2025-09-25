@@ -21,25 +21,25 @@ func TestHandleResultsFailedChecks(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		res        *paymentValidationResult
+		res        *PaymentValidationResult
 		wantTopic  cmn.Topic
 		wantReason string
 	}{
 		{
 			name: "timed out",
-			res: &paymentValidationResult{
-				timedOut:       true,
-				paymentRequest: pr,
+			res: &PaymentValidationResult{
+				TimedOut:       true,
+				PaymentRequest: pr,
 			},
 			wantTopic:  cmn.Topics.PaymentFailed(),
-			wantReason: "timeout",
+			wantReason: "validation timeout",
 		},
 		{
 			name: "single check failed",
-			res: &paymentValidationResult{
-				paymentRequest: pr,
-				results: []checkResult{
-					{checkName: "chk1", result: false},
+			res: &PaymentValidationResult{
+				PaymentRequest: pr,
+				Results: []CheckResult{
+					{CheckName: "chk1", Result: false},
 				},
 			},
 			wantTopic:  cmn.Topics.PaymentFailed(),
@@ -47,12 +47,12 @@ func TestHandleResultsFailedChecks(t *testing.T) {
 		},
 		{
 			name: "single check of many failed",
-			res: &paymentValidationResult{
-				paymentRequest: pr,
-				results: []checkResult{
-					{checkName: "chk1", result: true},
-					{checkName: "chk2", result: false},
-					{checkName: "chk3", result: true},
+			res: &PaymentValidationResult{
+				PaymentRequest: pr,
+				Results: []CheckResult{
+					{CheckName: "chk1", Result: true},
+					{CheckName: "chk2", Result: false},
+					{CheckName: "chk3", Result: true},
 				},
 			},
 			wantTopic:  cmn.Topics.PaymentFailed(),
@@ -60,12 +60,12 @@ func TestHandleResultsFailedChecks(t *testing.T) {
 		},
 		{
 			name: "all checks failed",
-			res: &paymentValidationResult{
-				paymentRequest: pr,
-				results: []checkResult{
-					{checkName: "chk1", result: false},
-					{checkName: "chk2", result: false},
-					{checkName: "chk3", result: false},
+			res: &PaymentValidationResult{
+				PaymentRequest: pr,
+				Results: []CheckResult{
+					{CheckName: "chk1", Result: false},
+					{CheckName: "chk2", Result: false},
+					{CheckName: "chk3", Result: false},
 				},
 			},
 			wantTopic:  cmn.Topics.PaymentFailed(),
@@ -75,9 +75,10 @@ func TestHandleResultsFailedChecks(t *testing.T) {
 
 	writer := tu.MockKafkaWriter{}
 
-	env := appEnv{
-		BaseEnv: cmn.BaseEnv{}.WithCancelCtx(context.Background()),
-		writer:  &writer,
+	appCtx := AccountsCtx{
+		cancelCtx: context.Background(),
+		writer:    &writer,
+		logger:    cmn.AppLogger(),
 	}
 
 	for _, tt := range tests {
@@ -85,12 +86,12 @@ func TestHandleResultsFailedChecks(t *testing.T) {
 			// reset messages
 			writer.Messages = []kafka.Message{}
 
-			handleResults(tt.res, &env)
+			handleValidationResults(tt.res, &appCtx)
 
 			assert.Equal(t, len(writer.Messages), 1)
 			assert.Equal(t, writer.Messages[0].Topic, tt.wantTopic.S())
 
-			pm, err := cmn.FromBytes[paymentMsg](writer.Messages[0].Value)
+			pm, err := cmn.FromBytes[PaymentMsg](writer.Messages[0].Value)
 			if err != nil {
 				t.Fatal("error decoding message value")
 			}
@@ -119,14 +120,14 @@ func TestHandleResultsChecksPassed(t *testing.T) {
 
 	tests := []struct {
 		name string
-		res  *paymentValidationResult
+		res  *PaymentValidationResult
 	}{{
 		name: "all checks passed",
-		res: &paymentValidationResult{
-			paymentRequest: pr,
-			results: []checkResult{
-				{checkName: "chk1", result: true},
-				{checkName: "chk2", result: true},
+		res: &PaymentValidationResult{
+			PaymentRequest: pr,
+			Results: []CheckResult{
+				{CheckName: "chk1", Result: true},
+				{CheckName: "chk2", Result: true},
 			},
 		},
 	},
@@ -134,9 +135,10 @@ func TestHandleResultsChecksPassed(t *testing.T) {
 
 	writer := tu.MockKafkaWriter{}
 
-	env := appEnv{
-		BaseEnv: cmn.BaseEnv{}.WithCancelCtx(context.Background()),
-		writer:  &writer,
+	appCtx := AccountsCtx{
+		cancelCtx: context.Background(),
+		writer:    &writer,
+		logger:    cmn.AppLogger(),
 	}
 
 	for _, tt := range tests {
@@ -144,7 +146,7 @@ func TestHandleResultsChecksPassed(t *testing.T) {
 			// reset messages
 			writer.Messages = []kafka.Message{}
 
-			handleResults(tt.res, &env)
+			handleValidationResults(tt.res, &appCtx)
 
 			assert.Equal(t, len(writer.Messages), 2)
 			m1 := writer.Messages[0]

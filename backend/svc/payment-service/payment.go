@@ -13,11 +13,6 @@ import (
 	cmn "github.com/timkins666/distributed-playground/backend/pkg/common"
 )
 
-type appEnv struct {
-	cmn.BaseEnv
-	writer cmn.KafkaWriter
-}
-
 func main() {
 	writer := &kafka.Writer{
 		Addr: kafka.TCP(cmn.KafkaBroker()),
@@ -27,15 +22,7 @@ func main() {
 	cancelCtx, stop := cmn.GetCancelContext()
 	defer stop()
 
-	db, err := cmn.InitDB(cmn.DefaultConfig)
-	if err != nil {
-		log.Panicln(err.Error())
-	}
-
-	env := appEnv{
-		BaseEnv: cmn.BaseEnv{}.WithCancelCtx(cancelCtx).WithDB(db),
-		writer:  writer,
-	}
+	appCtx := newAppCtx(cancelCtx)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/transfer", handlePaymentRequest)
@@ -45,14 +32,14 @@ func main() {
 	log.Fatal(http.ListenAndServe(port,
 		cmn.SetUserIDMiddlewareHandler(
 			cmn.SetContextValuesMiddleware(
-				map[cmn.ContextKey]any{cmn.EnvKey: &env})(mux))))
+				map[cmn.ContextKey]any{cmn.AppCtx: &appCtx})(mux))))
 }
 
 // handles initial transfer request from gateway
 func handlePaymentRequest(w http.ResponseWriter, r *http.Request) {
-	env, ok := r.Context().Value(cmn.EnvKey).(*appEnv)
+	appCtx, ok := r.Context().Value(cmn.AppCtx).(*paymentCtx)
 	if !ok {
-		log.Println("invalid env")
+		log.Println("invalid appCtx")
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -83,28 +70,40 @@ func handlePaymentRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// create payment in system for tracking and analytics/reconciliation
-	if err = createDBPayment(req, env); err != nil {
-		env.Logger().Println(err)
+	if err = createDBPayment(req, appCtx); err != nil {
+		appCtx.logger.Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	err = env.writer.WriteMessages(context.Background(), kafka.Message{
+	err = appCtx.writer.WriteMessages(context.Background(), kafka.Message{
 		Topic: cmn.Topics.PaymentRequested().S(),
 		Key:   key,
 		Value: msg,
 	})
 	if err != nil {
-		env.Logger().Println("WRITE ERR:", err)
+		appCtx.logger.Println("WRITE ERR:", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	env.Logger().Printf("Sent payment-requested message: %s", msg)
+	appCtx.logger.Printf("Sent payment-requested message: %s", msg)
 	w.WriteHeader(http.StatusAccepted)
 }
 
-func createDBPayment(req cmn.PaymentRequest, env *appEnv) error {
+func createDBPayment(req cmn.PaymentRequest, appCtx *paymentCtx) error {
 	log.Printf("saving payment to db: %+v", req)
-	return env.DB().CreatePayment(&req)
+	return appCtx.db.createPayment(&req)
 }
+
+// TODO: on tx complete. + use types for status
+// func (db *DB) UpdatePaymentStatus(sysId, status string) error {
+// 	// TODO: check affected row count == 1
+// 	_, err := db.db.Exec(`
+// 		UPDATE payments.transfer
+// 		SET status = $1
+// 		WHERE system_id = $2
+// 	`, status, sysId)
+
+// 	return err
+// }

@@ -13,26 +13,6 @@ services:
       CHOKIDAR_USEPOLLING: true
     command: npm run dev -- --host
 
-  # nginx:
-  #   image: nginx:stable-alpine
-  #   ports:
-  #     - "80:80"
-  #   volumes:
-  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
-  #   depends_on:
-  #     - api-gateway1
-  #     - api-gateway2
-
-  # api-gateway1:
-  #   build: ./api-gateway
-  #   environment:
-  #     - KAFKA_BROKER=kafka:9092
-
-  # api-gateway2:
-  #   build: ./api-gateway
-  #   environment:
-  #     - KAFKA_BROKER=kafka:9092
-
   api-gateway:
     container_name: gateway
     build:
@@ -133,7 +113,7 @@ services:
       POSTGRES_HOST: $POSTGRES_HOST
 
   kafka:
-    image: bitnami/kafka:latest
+    image: bitnamilegacy/kafka:latest
     container_name: kafka
     ports:
       - "29092:$KAFKA_PORT"
@@ -157,7 +137,7 @@ services:
       retries: 10
 
   kafka-init:
-    image: bitnami/kafka:latest
+    image: bitnamilegacy/kafka:latest
     container_name: kafka-init
     depends_on:
       - kafka
@@ -195,9 +175,39 @@ services:
       PGPASSWORD: postgres  # Needed for psql to auth
     entrypoint: ["sh","-c","psql -h postgres -U postgres -f /init/init.sql"]
 
+# redis:
+#   image: redis:7-alpine
+#   container_name: redis
+#   ports:
+#     - "6379:6379"
+#   volumes:
+#     - redis-data:/data
+#   command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+#   healthcheck:
+#     test: ["CMD", "redis-cli", "ping"]
+#     interval: 5s
+#     timeout: 3s
+#     retries: 3
+
+# redisinsight:
+#   image: redis/redisinsight:latest
+#   container_name: redisinsight
+#   ports:
+#     - "5540:5540"
+#   depends_on:
+#     - redis
+#   environment:
+#     - RI_APP_PORT=5540
+#     # Optional: Preload connection to your Redis container
+#     - REDIS_URI=redis://redis:6379
+#   volumes:
+#     - redisinsight-data:/data
+#   restart: unless-stopped
 
 volumes:
- postgres_data:
+  postgres_data:
+  redis-data:
+  redisinsight-data:
   
 # cassandra:
 #   image: cassandra:4.1
@@ -217,13 +227,22 @@ volumes:
 #     - ./db/cassandra-init:/schema
 
 
+  # nginx:
+  #   image: nginx:stable-alpine
+  #   ports:
+  #     - "80:80"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  #   depends_on:
+  #     - api-gateway1
+  #     - api-gateway2
 
-# redis:
-#   image: redis:7-alpine
-#   ports:
-#     - "6379:6379"
-#   healthcheck:
-#     test: ["CMD", "redis-cli", "ping"]
-#     interval: 5s
-#     timeout: 3s
-#     retries: 3
+  # api-gateway1:
+  #   build: ./api-gateway
+  #   environment:
+  #     - KAFKA_BROKER=kafka:9092
+
+  # api-gateway2:
+  #   build: ./api-gateway
+  #   environment:
+  #     - KAFKA_BROKER=kafka:9092

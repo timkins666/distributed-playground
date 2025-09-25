@@ -85,7 +85,7 @@ func TestCreateUserToken(t *testing.T) {
 		}},
 	}
 
-	user := User{
+	user := &User{
 		ID: 12345,
 	}
 
@@ -106,7 +106,7 @@ func TestCreateUserToken(t *testing.T) {
 
 func TestSetUserID(t *testing.T) {
 	r := httptest.NewRequest("get", "/", nil)
-	token, _ := CreateUserToken(User{ID: 123})
+	token, _ := CreateUserToken(&User{ID: 123})
 	r.Header.Add(authHeader, authHeaderPrefix+token)
 
 	setUserID(r)

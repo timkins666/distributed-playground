@@ -5,7 +5,7 @@ import { Link } from 'react-router';
 import { authSelector, logout } from '../store/authSlice';
 import { clearLocalStorageLogin } from '../utils/auth';
 
-const DELAY_FOR_NO_REASON=2
+const DELAY_FOR_NO_REASON=2 // seconds
 
 export default function Logout() {
   const authStatus = useSelector(authSelector);

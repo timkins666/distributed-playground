@@ -1,6 +1,6 @@
 package common
 
-// defines grouped immutable topic constants, possibly not very idiomatic
+// defines grouped immutable topic constants, probably not very idiomatic
 
 type Topic string
 

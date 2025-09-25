@@ -1,227 +1,48 @@
 package main
 
 import (
-	"database/sql"
-	"encoding/gob"
-	"encoding/json"
+	"context"
 	"fmt"
 	"log"
-	"math/rand/v2"
-	"net/http"
-	"os"
-
-	"github.com/google/uuid"
-	"github.com/segmentio/kafka-go"
-	cmn "github.com/timkins666/distributed-playground/backend/pkg/common"
-)
-
-func init() {
-	gob.Register(cmn.Transaction{})
-}
-
-var (
-	banks []*cmn.Bank = []*cmn.Bank{{Name: "Bonzo", ID: 1}} // tmp
 )
 
 func main() {
-	kafkaBroker := cmn.KafkaBroker()
-
-	cancelCtx, stop := cmn.GetCancelContext()
-	defer stop()
-
-	db, err := cmn.InitDB(cmn.DefaultConfig)
+	config, err := LoadConfig()
 	if err != nil {
-		log.Panicln("Failed to initialise postgres")
+		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	env := appEnv{
-		BaseEnv: cmn.BaseEnv{}.WithCancelCtx(cancelCtx).WithDB(db),
-		payReqReader: kafka.NewReader(kafka.ReaderConfig{
-			Brokers: []string{kafkaBroker},
-			Topic:   cmn.Topics.PaymentRequested().S(),
-			GroupID: "payment-validator",
-		}),
-		writer: &kafka.Writer{
-			Addr:         kafka.TCP(kafkaBroker),
-			RequiredAcks: 1,
-			MaxAttempts:  5,
-		},
-	}
+	cancelCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	defer env.payReqReader.Close()
-	defer env.writer.Close()
+	appCtx := newAppCtx(cancelCtx, config)
+	defer appCtx.Close()
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/banks", getAllBanksHandler)
-	mux.HandleFunc("/myaccounts", getUserAccountsHandler)
-	mux.HandleFunc("/new", createUserAccountHandler)
-
-	go paymentValidator(&env)
-
-	port := ":" + os.Getenv("SERVE_PORT")
-	env.Logger().Printf("Accounts service running on %s", port)
-	log.Fatal(http.ListenAndServe(port,
-		cmn.SetUserIDMiddlewareHandler(
-			cmn.SetContextValuesMiddleware(
-				map[cmn.ContextKey]any{cmn.EnvKey: &env})(mux))))
-}
-
-func getAllBanksHandler(w http.ResponseWriter, r *http.Request) {
-	env, _ := r.Context().Value(cmn.EnvKey).(*appEnv)
-	userID, ok := r.Context().Value(cmn.UserIDKey).(int32)
-
-	if userID == 0 || !ok {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Println(w, "Nope")
-		return
-	}
-
-	user, err := env.DB().LoadUserByID(userID)
-	if err != nil || !user.Valid() {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Println(w, "Nope")
-	}
-
-	env.Logger().Printf("getallbanks user %s", user.Username)
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(banks)
-}
-
-func getUserAccountsHandler(w http.ResponseWriter, r *http.Request) {
-	env, _ := r.Context().Value(cmn.EnvKey).(*appEnv)
-	userID, _ := r.Context().Value(cmn.UserIDKey).(int32)
-
-	if userID == 0 {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Println(w, "Nope")
-		return
-	}
-
-	accs, err := env.DB().GetUserAccounts(userID)
-
-	if err == nil || err == sql.ErrNoRows {
-		if len(accs) == 0 {
-			accs = []cmn.Account{}
-		}
-		env.Logger().Printf("Accs: %+v", accs)
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(accs)
-		return
-	}
-
-	w.WriteHeader(http.StatusInternalServerError)
-	fmt.Println(w, "Nope")
-}
-
-type newAccountRequest struct {
-	Name                 string `json:"name"`
-	SourceFundsAccountID int32  `json:"sourceFundsAccountId"`
-	InitialBalance       int64  `json:"initialBalance"`
-}
-
-// quick implementation for now
-func createUserAccountHandler(w http.ResponseWriter, r *http.Request) {
-	env, _ := r.Context().Value(cmn.EnvKey).(*appEnv)
-	userID, _ := r.Context().Value(cmn.UserIDKey).(int32)
-
-	var req *newAccountRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Println(w, "Nope")
-		return
-	}
-
-	var sourceAcc *cmn.Account
-	userAccounts, err := env.DB().GetUserAccounts(userID)
+	service, err := initializeService(appCtx)
 	if err != nil {
-		// TODO: handle err
+		log.Fatalf("Failed to initialize service: %v", err)
 	}
 
-	if len(userAccounts) > 0 {
-		if req.InitialBalance <= 0 {
-			w.WriteHeader(http.StatusBadRequest)
-			resp := map[string]string{"errorReason": "Must transfer with an initial balance"}
-			json.NewEncoder(w).Encode(resp)
-			return
-		}
-
-		sourceAcc, err = env.DB().GetAccountByID(req.SourceFundsAccountID)
-		if sourceAcc == nil {
-			env.Logger().Printf(
-				"Account %d not found. Doesn't exist or not owned by user %d",
-				req.SourceFundsAccountID,
-				userID,
-			)
-			w.WriteHeader(http.StatusBadRequest)
-			resp := map[string]string{"errorReason": "Invalid source account"}
-			json.NewEncoder(w).Encode(resp)
-			return
-		}
-
-		if sourceAcc.Balance < req.InitialBalance {
-			w.WriteHeader(http.StatusBadRequest)
-			resp := map[string]string{"errorReason": "Source account doesn't have enough funds"}
-			json.NewEncoder(w).Encode(resp)
-			return
-		}
-	} else {
-		req.InitialBalance = rand.Int64N(10e5)
+	server := NewHTTPServer(service, config)
+	if err := server.Start(cancelCtx); err != nil {
+		log.Fatalf("Server error: %v", err)
 	}
+}
 
-	newAccount := cmn.Account{
-		Name:     req.Name,
-		UserID:   userID,
-		Balance:  req.InitialBalance,
-		BankID:   banks[0].ID,
-		BankName: banks[0].Name,
+// represents the request to create a new account
+type CreateAccountRequest struct {
+	Name                 string `json:"name" validate:"required,min=1,max=30"` // TODO: this vs method checks
+	SourceFundsAccountID int32  `json:"sourceFundsAccountId,omitempty"`
+	InitialBalance       int64  `json:"initialBalance,omitempty"`
+}
+
+// checks if the request is valid. Account/balance checks deferred until later.
+func (r *CreateAccountRequest) Validate() error {
+	if r.Name == "" {
+		return fmt.Errorf("account name is required")
 	}
-
-	if accID, err := env.DB().CreateAccount(newAccount); err != nil || accID <= 0 {
-		env.Logger().Println("ERROR: ", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Println(w, "Error creating account")
-		return
-	} else {
-		newAccount.AccountID = accID
+	if len(r.Name) > 30 {
+		return fmt.Errorf("account name too long (max 30 characters)")
 	}
-
-	env.Logger().Println("Opened new account", newAccount)
-
-	respAccounts := []cmn.Account{newAccount}
-	payId := uuid.NewString()
-	txKey, _ := cmn.ToBytes(newAccount.AccountID)
-	txMsg, _ := cmn.ToBytes(cmn.Transaction{
-		TxID:         uuid.NewString(),
-		Amount:       newAccount.Balance,
-		AccountID:    newAccount.AccountID,
-		PaymentSysID: payId,
-	})
-
-	env.Writer().WriteMessages(env.CancelCtx(),
-		kafka.Message{
-			Topic: cmn.Topics.TransactionRequested().S(),
-			Key:   txKey,
-			Value: txMsg,
-		})
-
-	if sourceAcc != nil {
-		txKey, _ := cmn.ToBytes(req.SourceFundsAccountID)
-		txMsg, _ := json.Marshal(cmn.Transaction{
-			TxID:         uuid.NewString(),
-			Amount:       -newAccount.Balance,
-			AccountID:    req.SourceFundsAccountID,
-			PaymentSysID: payId,
-		})
-		env.Writer().WriteMessages(env.CancelCtx(),
-			kafka.Message{
-				Topic: cmn.Topics.TransactionRequested().S(),
-				Key:   txKey,
-				Value: txMsg,
-			})
-		sourceAcc.Balance -= req.InitialBalance
-		respAccounts = append(respAccounts, *sourceAcc)
-	}
-
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(respAccounts)
+	return nil
 }

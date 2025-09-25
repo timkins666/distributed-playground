@@ -1,14 +1,12 @@
-import { useState } from "react";
 import { Box, Button, Grid, Typography } from "@mui/material";
-import { useAccounts } from "../hooks/useAccounts";
-import { useBanks } from "../hooks/useBanks";
+import { useState } from "react";
 import { AccountCard } from "../components/ui/AccountCard";
-import { TransferForm } from "../components/ui/TransferForm";
 import { CreateAccountDialog } from "../components/ui/CreateAccountDialog";
+import { TransferForm } from "../components/ui/TransferForm";
+import { useAccounts } from "../hooks/useAccounts";
 
 const AccountsPage = () => {
   const { accounts, createAccount, transferFunds } = useAccounts();
-  const { banks } = useBanks();
   const [createOpen, setCreateOpen] = useState(false);
 
   const handleCreateAccount = async (name: string, sourceFundsAccountId?: number, initialBalance?: number) => {
@@ -26,9 +24,9 @@ const AccountsPage = () => {
       </Typography>
 
       <Grid container spacing={2} mb={4}>
-        {accounts.map((account) => (
+        {[...accounts].sort((a,b) => a.name < b.name ? -1 : 1).map((account) => (
           <Grid size={{ xs: 12, md: 6, lg: 4 }} key={account.accountId}>
-            <AccountCard account={account} />
+            <AccountCard account={account}/>
           </Grid>
         ))}
       </Grid>

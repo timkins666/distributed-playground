@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,30 +14,28 @@ import (
 	tu "github.com/timkins666/distributed-playground/backend/pkg/testutils"
 )
 
-// MockDB is a mock implementation of the database interface for testing
-type MockDB struct {
-	tu.BaseTestDB
+type MockAccDB struct {
 	users    map[int32]cmn.User
 	accounts map[int32]cmn.Account
 	payments []cmn.PaymentRequest
 }
 
-func NewMockDB() MockDB {
-	return MockDB{
+func NewMockAccDB() *MockAccDB {
+	return &MockAccDB{
 		users:    make(map[int32]cmn.User),
 		accounts: make(map[int32]cmn.Account),
 	}
 }
 
-func (m *MockDB) LoadUserByID(userID int32) (cmn.User, error) {
+func (m *MockAccDB) getUserByID(userID int32) (*cmn.User, error) {
 	user, ok := m.users[userID]
 	if !ok {
-		return cmn.User{}, nil
+		return nil, fmt.Errorf("user %d not set up", userID)
 	}
-	return user, nil
+	return &user, nil
 }
 
-func (m *MockDB) GetUserAccounts(userID int32) ([]cmn.Account, error) {
+func (m *MockAccDB) getUserAccounts(userID int32) ([]cmn.Account, error) {
 	var accounts []cmn.Account
 	for _, acc := range m.accounts {
 		if acc.UserID == userID {
@@ -46,29 +45,29 @@ func (m *MockDB) GetUserAccounts(userID int32) ([]cmn.Account, error) {
 	return accounts, nil
 }
 
-func (m *MockDB) GetAccountByID(accountID int32) (*cmn.Account, error) {
+func (m *MockAccDB) getAccountByID(accountID int32) (*cmn.Account, error) {
 	acc, ok := m.accounts[accountID]
 	if !ok {
-		return nil, nil
+		return nil, cmn.ErrAccountNotFound
 	}
 	return &acc, nil
 }
 
-func (m *MockDB) CreateAccount(a cmn.Account) (int32, error) {
+func (m *MockAccDB) createAccount(a cmn.Account) (int32, error) {
 	id := int32(len(m.accounts) + 1)
 	a.AccountID = id
 	m.accounts[id] = a
 	return id, nil
 }
 
-func (m *MockDB) CreatePayment(pr *cmn.PaymentRequest) error {
+func (m *MockAccDB) createPayment(pr *cmn.PaymentRequest) error {
 	m.payments = append(m.payments, *pr)
 	return nil
 }
 
-// setupTestApp creates a test app with mock dependencies
-func setupTestApp() appEnv {
-	mockDB := NewMockDB()
+// getTestService creates a test app with mock dependencies
+func getTestService() Service {
+	mockDB := NewMockAccDB()
 	mockWriter := tu.MockKafkaWriter{}
 	mockReader := tu.MockKafkaReader{}
 
@@ -86,26 +85,31 @@ func setupTestApp() appEnv {
 		UserID:    1,
 		Balance:   1000,
 		BankID:    1,
-		BankName:  "Bonzo",
+		BankName:  "BankOfTim",
 	}
 
-	return appEnv{
-		BaseEnv:      cmn.BaseEnv{}.WithCancelCtx(context.Background()).WithDB(&mockDB),
-		payReqReader: &mockReader,
-		writer:       &mockWriter,
+	return Service{
+		appCtx: &AccountsCtx{
+			cancelCtx:    context.Background(),
+			db:           mockDB,
+			logger:       cmn.AppLogger(),
+			payReqReader: &mockReader,
+			writer:       &mockWriter,
+		},
+		banks: []*cmn.Bank{{Name: "BankOfTim", ID: 1}},
 	}
 }
 
 // setupTestRequest creates a test HTTP request with the app and userID in the context
-func setupTestRequest(method, url string, body []byte, env appEnv, userID int32) *http.Request {
+func setupTestRequest(method, url string, body []byte, appCtx AccountsCtx, userID int32) *http.Request {
 	req := httptest.NewRequest(method, url, bytes.NewBuffer(body))
-	ctx := context.WithValue(req.Context(), cmn.EnvKey, &env)
+	ctx := context.WithValue(req.Context(), cmn.AppCtx, &appCtx)
 	ctx = context.WithValue(ctx, cmn.UserIDKey, userID)
 	return req.WithContext(ctx)
 }
 
 func TestGetAllBanksHandler(t *testing.T) {
-	testApp := setupTestApp()
+	service := getTestService()
 
 	tests := []struct {
 		name           string
@@ -117,7 +121,7 @@ func TestGetAllBanksHandler(t *testing.T) {
 			name:           "valid user",
 			userID:         1,
 			expectedStatus: http.StatusOK,
-			expectedBanks:  []*cmn.Bank{{Name: "Bonzo", ID: 1}},
+			expectedBanks:  []*cmn.Bank{{Name: "BankOfTim", ID: 1}},
 		},
 		{
 			name:           "invalid user",
@@ -129,10 +133,10 @@ func TestGetAllBanksHandler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := setupTestRequest("GET", "/banks", nil, testApp, tt.userID)
+			req := setupTestRequest("GET", "/banks", nil, *service.appCtx, tt.userID)
 			w := httptest.NewRecorder()
 
-			getAllBanksHandler(w, req)
+			service.getAllBanksHandler(w, req)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
 
@@ -149,7 +153,7 @@ func TestGetAllBanksHandler(t *testing.T) {
 }
 
 func TestGetUserAccountsHandler(t *testing.T) {
-	testApp := setupTestApp()
+	service := getTestService()
 
 	tests := []struct {
 		name           string
@@ -168,7 +172,7 @@ func TestGetUserAccountsHandler(t *testing.T) {
 					UserID:    1,
 					Balance:   1000,
 					BankID:    1,
-					BankName:  "Bonzo",
+					BankName:  "BankOfTim",
 				},
 			},
 		},
@@ -188,10 +192,10 @@ func TestGetUserAccountsHandler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := setupTestRequest("GET", "/myaccounts", nil, testApp, tt.userID)
+			req := setupTestRequest("GET", "/myaccounts", nil, *service.appCtx, tt.userID)
 			w := httptest.NewRecorder()
 
-			getUserAccountsHandler(w, req)
+			service.getUserAccountsHandler(w, req)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
 
@@ -212,22 +216,22 @@ func TestGetUserAccountsHandler(t *testing.T) {
 }
 
 func TestCreateUserAccountHandler(t *testing.T) {
-	testApp := setupTestApp()
+	service := getTestService()
 
 	tests := []struct {
 		name           string
 		userID         int32
-		request        newAccountRequest
+		request        CreateAccountRequest
 		expectedStatus int
 		checkResponse  func(t *testing.T, resp []byte, mockWriter *tu.MockKafkaWriter)
 	}{
 		{
 			name:   "new user first account",
 			userID: 2,
-			request: newAccountRequest{
+			request: CreateAccountRequest{
 				Name: "First Account",
 			},
-			expectedStatus: http.StatusOK,
+			expectedStatus: http.StatusCreated,
 			checkResponse: func(t *testing.T, resp []byte, mockWriter *tu.MockKafkaWriter) {
 				var accounts []cmn.Account
 				err := json.Unmarshal(resp, &accounts)
@@ -241,12 +245,12 @@ func TestCreateUserAccountHandler(t *testing.T) {
 		{
 			name:   "existing user new account with source funds",
 			userID: 1,
-			request: newAccountRequest{
+			request: CreateAccountRequest{
 				Name:                 "Second Account",
 				SourceFundsAccountID: 1,
 				InitialBalance:       500,
 			},
-			expectedStatus: http.StatusOK,
+			expectedStatus: http.StatusCreated,
 			checkResponse: func(t *testing.T, resp []byte, mockWriter *tu.MockKafkaWriter) {
 				var accounts []cmn.Account
 				err := json.Unmarshal(resp, &accounts)
@@ -278,7 +282,7 @@ func TestCreateUserAccountHandler(t *testing.T) {
 		{
 			name:   "insufficient funds in source account",
 			userID: 1,
-			request: newAccountRequest{
+			request: CreateAccountRequest{
 				Name:                 "Third Account",
 				SourceFundsAccountID: 1,
 				InitialBalance:       2000, // More than the 1000 balance
@@ -288,13 +292,13 @@ func TestCreateUserAccountHandler(t *testing.T) {
 				var errorResp map[string]string
 				err := json.Unmarshal(resp, &errorResp)
 				assert.Equal(t, nil, err)
-				assert.Equal(t, "Source account doesn't have enough funds", errorResp["errorReason"])
+				assert.Equal(t, "source account doesn't have enough funds", errorResp["error"])
 			},
 		},
 		{
 			name:   "invalid source account",
 			userID: 1,
-			request: newAccountRequest{
+			request: CreateAccountRequest{
 				Name:                 "Fourth Account",
 				SourceFundsAccountID: 999, // Non-existent account
 				InitialBalance:       100,
@@ -304,13 +308,13 @@ func TestCreateUserAccountHandler(t *testing.T) {
 				var errorResp map[string]string
 				err := json.Unmarshal(resp, &errorResp)
 				assert.Equal(t, nil, err)
-				assert.Equal(t, "Invalid source account", errorResp["errorReason"])
+				assert.Equal(t, cmn.ErrAccountNotFound.Error(), errorResp["error"])
 			},
 		},
 		{
 			name:   "existing user new account with no initial balance",
 			userID: 1,
-			request: newAccountRequest{
+			request: CreateAccountRequest{
 				Name:                 "Fifth Account",
 				SourceFundsAccountID: 1,
 				InitialBalance:       0, // No initial balance
@@ -320,7 +324,7 @@ func TestCreateUserAccountHandler(t *testing.T) {
 				var errorResp map[string]string
 				err := json.Unmarshal(resp, &errorResp)
 				assert.Equal(t, nil, err)
-				assert.Equal(t, "Must transfer with an initial balance", errorResp["errorReason"])
+				assert.Equal(t, cmn.ErrNoNewAccountBalance.Error(), errorResp["error"])
 			},
 		},
 	}
@@ -328,7 +332,7 @@ func TestCreateUserAccountHandler(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Reset the mock writer messages
-			writer, ok := testApp.writer.(*tu.MockKafkaWriter)
+			writer, ok := service.appCtx.writer.(*tu.MockKafkaWriter)
 			if !ok {
 				t.Fatal("writer is not mock writer")
 			}
@@ -337,10 +341,10 @@ func TestCreateUserAccountHandler(t *testing.T) {
 
 			// Create request body
 			reqBody, _ := json.Marshal(tt.request)
-			req := setupTestRequest("POST", "/new", reqBody, testApp, tt.userID)
+			req := setupTestRequest("POST", "/new", reqBody, *service.appCtx, tt.userID)
 			w := httptest.NewRecorder()
 
-			createUserAccountHandler(w, req)
+			service.createUserAccountHandler(w, req)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
 			tt.checkResponse(t, w.Body.Bytes(), writer)

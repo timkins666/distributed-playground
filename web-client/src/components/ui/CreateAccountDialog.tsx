@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   Button,
   Dialog,
@@ -12,6 +11,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import { useState } from "react";
 import { Account } from "../../types";
 import { verifyAndConvertAmount } from "../../utils/currency";
 
@@ -75,7 +75,7 @@ export const CreateAccountDialog = ({
               >
                 {accounts.map((acc) => (
                   <MenuItem key={acc.accountId} value={acc.accountId}>
-                    {acc.name}
+                    {acc.name} (£{(acc.balance / 100).toFixed(2)})
                   </MenuItem>
                 ))}
               </Select>

@@ -17,7 +17,7 @@ var secretKey = []byte("super-secret-shh")
 type ContextKey string
 
 const UserIDKey ContextKey = "userIDKey"
-const EnvKey ContextKey = "app"
+const AppCtx ContextKey = "appCtx"
 
 const authHeader string = "Authorization"
 const authHeaderPrefix string = "Bearer "
@@ -99,13 +99,32 @@ func getToken(r *http.Request) (*jwt.Token, error) {
 }
 
 func parseToken(tokenStr string) (*jwt.Token, error) {
-	// todo: see Parse doc
-	return jwt.Parse(tokenStr, func(token *jwt.Token) (any, error) {
+	// todo: see jwt.Parse docstring for alg checking
+	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (any, error) {
 		return secretKey, nil
 	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	sub, err := token.Claims.GetSubject()
+	if err != nil {
+		return nil, err
+	}
+	userId, err := strconv.Atoi(sub)
+	if err != nil {
+		return nil, err
+	}
+	if userId == 0 {
+		return nil, errors.New("failed to get user id from token")
+	}
+
+	return token, nil
 }
 
-func CreateUserToken(user User) (string, error) {
+func CreateUserToken(user *User) (string, error) {
+	log.Printf("Creating token for user: %+v", user)
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256,
 		jwt.MapClaims{
 			"sub": strconv.Itoa(int(user.ID)),
