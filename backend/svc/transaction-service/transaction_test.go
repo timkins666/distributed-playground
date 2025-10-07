@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/bmizerany/assert"
@@ -16,6 +17,10 @@ type MockDB struct {
 func (m *MockDB) commitTransaction(transaction *cmn.Transaction) error {
 	m.transactions = append(m.transactions, transaction)
 	return nil
+}
+
+func (m *MockDB) getAccountByID(accountID int32) (*cmn.Account, error) {
+	return nil, errors.New("don't need this")
 }
 
 func TestProcessMessage(t *testing.T) {

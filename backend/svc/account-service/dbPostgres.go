@@ -1,22 +1,25 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"log"
+	"strconv"
+	"time"
 
 	"github.com/lib/pq"
+	"github.com/redis/go-redis/v9"
 	cmn "github.com/timkins666/distributed-playground/backend/pkg/common"
 )
 
 type dbPostgres struct {
-	db *sql.DB
+	db          *sql.DB
+	redisClient *redis.Client
 }
 
-// get single account matching id.
+// get single account matching id. always uses db for source of truth.
 func (db *dbPostgres) getAccountByID(accountID int32) (*cmn.Account, error) {
-
-	// TODO: redis
-	// TOFO: squirrel / sqlx
+	// TODO: squirrel / sqlx
 
 	acc := cmn.Account{}
 
@@ -29,11 +32,26 @@ func (db *dbPostgres) getAccountByID(accountID int32) (*cmn.Account, error) {
 	return &acc, nil
 }
 
-// get all accounts for the user from db
+// get all accounts for the user from redis/db
 func (db *dbPostgres) getUserAccounts(userID int32) ([]cmn.Account, error) {
+	// TODO: squirrel / sqlx
+	// BIG TODO: put redis stuff somewhere else
 
-	// TODO: redis
-	// TOFO: squirrel / sqlx
+	var redisKey string
+	if db.redisClient != nil {
+		redisKey = cmn.RedisKey(cmn.RedisKeyUserAccounts, strconv.Itoa(int(userID)))
+		cached, err := db.redisClient.Get(context.Background(), redisKey).Result()
+
+		if err == nil {
+			log.Printf("found cached accounts for user %d", userID)
+			accs, err := cmn.FromBytes[[]cmn.Account]([]byte(cached))
+			return *accs, err
+		} else if err != redis.Nil {
+			log.Printf("Error getting user %d accounts from cache: %v", userID, err)
+		}
+
+		log.Printf("getUserAccounts cache miss for user %d", userID)
+	}
 
 	var accounts []cmn.Account
 
@@ -60,6 +78,15 @@ func (db *dbPostgres) getUserAccounts(userID int32) ([]cmn.Account, error) {
 
 	log.Printf("user %d accounts\n%+v", userID, accounts)
 
+	b, err := cmn.ToBytes(accounts)
+	if err != nil {
+		return nil, err
+	}
+
+	if db.redisClient != nil {
+		log.Printf("Setting redis key %s", redisKey)
+		db.redisClient.Set(context.Background(), redisKey, string(b), time.Minute)
+	}
 	return accounts, nil
 }
 
@@ -70,6 +97,11 @@ func (db *dbPostgres) createAccount(a cmn.Account) (int32, error) {
 		VALUES ($1, $2)
 		RETURNING id
 		`, a.UserID, a.Name).Scan(&newAccID)
+
+	if db.redisClient != nil {
+		// invalidate cache TODO: separate consumer invalidation service
+		db.redisClient.Del(context.Background(), cmn.RedisKey(cmn.RedisKeyUserAccounts, strconv.Itoa(int(a.UserID))))
+	}
 	return newAccID, err
 }
 

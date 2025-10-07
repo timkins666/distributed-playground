@@ -1,10 +1,7 @@
 package common
 
 import (
-	"bytes"
 	"context"
-	"encoding/gob"
-	"encoding/hex"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -38,14 +35,6 @@ func SetContextValuesMiddleware(kv map[ContextKey]any) func(http.Handler) http.H
 	}
 }
 
-// func FromBytes[T any](b []byte) (*T, error) {
-// 	var t T
-// 	log.Println("FromBytes input\n", hex.EncodeToString(b))
-// 	buf := bytes.NewBuffer(b)
-// 	err := gob.NewDecoder(buf).Decode(&t)
-// 	return &t, err
-// }
-
 func FromBytes[T any](b []byte) (*T, error) {
 	var t T
 	err := json.Unmarshal(b, &t)
@@ -54,14 +43,4 @@ func FromBytes[T any](b []byte) (*T, error) {
 
 func ToBytes[T any](t T) ([]byte, error) {
 	return json.Marshal(t)
-}
-func ToBytes2[T any](t T) ([]byte, error) {
-	buf := new(bytes.Buffer)
-	err := gob.NewEncoder(buf).Encode(t)
-	b := buf.Bytes()
-	if buf.Len() > 0 {
-		log.Println("ToBytes output\n", hex.EncodeToString(b))
-	}
-
-	return buf.Bytes(), err
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/segmentio/kafka-go"
@@ -31,7 +32,9 @@ func main() {
 				appCtx.logger.Println(err)
 				continue
 			}
-			processMessage(msg, &appCtx)
+			if err := processMessage(msg, &appCtx); err != nil {
+				appCtx.logger.Printf("error in processMessage: %s", err)
+			}
 		}
 	}
 }
@@ -64,7 +67,24 @@ func processMessage(msg kafka.Message, appCtx *transactionCtx) error {
 		return errorCommittingTransaction
 	}
 
-	// TODO: complete kafka message
+	// TODO: tx complete kafka message => frontend and redis invalidator
 	appCtx.logger.Printf("Completed transaction %+v", tx)
+	invalidateCache(tx, appCtx)
 	return nil
+}
+
+// TODO: replace this hacky invalidation with a separate invalidation consumer
+func invalidateCache(tx *cmn.Transaction, appCtx *transactionCtx) {
+	if appCtx.redisClient == nil {
+		return
+	}
+	acc, err := appCtx.db.getAccountByID(tx.AccountID)
+	if err != nil {
+		appCtx.logger.Println(err)
+		return
+	}
+
+	key := cmn.RedisKey(cmn.RedisKeyUserAccounts, strconv.Itoa(int(acc.UserID)))
+	appCtx.logger.Printf("Invalidating redis key %s", key)
+	appCtx.redisClient.Del(appCtx.cancelCtx, key)
 }

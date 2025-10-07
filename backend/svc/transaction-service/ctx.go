@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/segmentio/kafka-go"
 	cmn "github.com/timkins666/distributed-playground/backend/pkg/common"
 )
@@ -14,6 +15,7 @@ type transactionCtx struct {
 	logger      *log.Logger
 	writer      cmn.KafkaWriter
 	txReqReader cmn.KafkaReader
+	redisClient *redis.Client
 }
 
 // close releases all resources
@@ -32,6 +34,12 @@ func (a *transactionCtx) close() error {
 		}
 	}
 
+	if a.redisClient != nil {
+		if err := a.redisClient.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
 	if len(errs) > 0 {
 		return errs[0]
 	}
@@ -39,6 +47,8 @@ func (a *transactionCtx) close() error {
 }
 
 func newAppCtx(cancelCtx context.Context) transactionCtx {
+	logger := cmn.AppLogger()
+
 	txReqReader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers: []string{cmn.KafkaBroker()},
 		GroupID: "process-transaction",
@@ -52,14 +62,21 @@ func newAppCtx(cancelCtx context.Context) transactionCtx {
 
 	db, err := initDB()
 	if err != nil {
-		log.Fatal(err)
+		logger.Fatal(err)
+	}
+
+	redisClient, err := cmn.NewRedisClient()
+	if err != nil {
+		logger.Println("Failed to start redis client, continuing without :(")
+		redisClient = nil // make sure it is
 	}
 
 	return transactionCtx{
 		cancelCtx:   cancelCtx,
 		db:          db,
-		logger:      cmn.AppLogger(),
 		writer:      writer,
 		txReqReader: txReqReader,
+		redisClient: redisClient,
+		logger:      logger,
 	}
 }

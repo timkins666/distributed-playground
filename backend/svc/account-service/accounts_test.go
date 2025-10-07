@@ -60,11 +60,6 @@ func (m *MockAccDB) createAccount(a cmn.Account) (int32, error) {
 	return id, nil
 }
 
-func (m *MockAccDB) createPayment(pr *cmn.PaymentRequest) error {
-	m.payments = append(m.payments, *pr)
-	return nil
-}
-
 // getTestService creates a test app with mock dependencies
 func getTestService() Service {
 	mockDB := NewMockAccDB()

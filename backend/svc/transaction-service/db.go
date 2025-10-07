@@ -9,6 +9,7 @@ import (
 
 type transactionDB interface {
 	commitTransaction(transaction *cmn.Transaction) error
+	getAccountByID(int32) (*cmn.Account, error)
 }
 
 func initDB() (transactionDB, error) {
@@ -16,7 +17,7 @@ func initDB() (transactionDB, error) {
 	if dbType == "POSTGRES" || !found {
 		db, err := cmn.InitPostgres(cmn.DefaultConfig)
 		if err != nil {
-			return nil, fmt.Errorf("failed to initialize database: %w", err)
+			return nil, fmt.Errorf("failed to initialise database: %w", err)
 		}
 		return &dbPostgres{db}, nil
 	}

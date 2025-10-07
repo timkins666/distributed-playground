@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/segmentio/kafka-go"
 	cmn "github.com/timkins666/distributed-playground/backend/pkg/common"
 )
@@ -14,6 +15,7 @@ type AccountsCtx struct {
 	logger       *log.Logger
 	payReqReader cmn.KafkaReader
 	writer       cmn.KafkaWriter
+	redisClient  *redis.Client
 }
 
 // Close releases all resources
@@ -32,6 +34,12 @@ func (a *AccountsCtx) Close() error {
 		}
 	}
 
+	if a.redisClient != nil {
+		if err := a.redisClient.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
 	if len(errs) > 0 {
 		return errs[0]
 	}
@@ -39,6 +47,8 @@ func (a *AccountsCtx) Close() error {
 }
 
 func newAppCtx(cancelCtx context.Context, config *Config) *AccountsCtx {
+	logger := cmn.AppLogger()
+
 	reader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers: []string{config.Kafka.Broker},
 		Topic:   cmn.Topics.PaymentRequested().S(),
@@ -51,16 +61,23 @@ func newAppCtx(cancelCtx context.Context, config *Config) *AccountsCtx {
 		MaxAttempts:  config.Kafka.MaxAttempts,
 	}
 
-	db, err := initDB()
+	redisClient, err := cmn.NewRedisClient() //TODO: env
+	if err != nil {
+		logger.Println("failed to initialise redis client, continuing without:", err.Error())
+		redisClient = nil // make sure
+	}
+
+	db, err := initDB(redisClient)
 	if err != nil {
 		panic(err)
 	}
 
 	return &AccountsCtx{
 		cancelCtx:    cancelCtx,
-		logger:       cmn.AppLogger(),
+		logger:       logger,
 		payReqReader: reader,
 		writer:       writer,
 		db:           db,
+		redisClient:  redisClient,
 	}
 }

@@ -61,3 +61,18 @@ func (db *dbPostgres) commitTransaction(transaction *cmn.Transaction) error {
 
 	return tx.Commit()
 }
+
+// get single account matching id. always uses db for source of truth.
+func (db *dbPostgres) getAccountByID(accountID int32) (*cmn.Account, error) {
+	// TODO: squirrel / sqlx
+
+	acc := cmn.Account{}
+
+	err := db.db.QueryRow(`
+		SELECT id, user_id, balance from accounts.account WHERE id = $1
+	`, accountID).Scan(&acc.AccountID, &acc.UserID, &acc.Balance)
+	if err != nil {
+		return nil, err
+	}
+	return &acc, nil
+}

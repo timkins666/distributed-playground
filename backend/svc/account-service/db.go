@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/redis/go-redis/v9"
 	cmn "github.com/timkins666/distributed-playground/backend/pkg/common"
 )
 
@@ -14,14 +15,14 @@ type accountsDB interface {
 	getUserByID(int32) (*cmn.User, error)
 }
 
-func initDB() (accountsDB, error) {
+func initDB(redisClient *redis.Client) (accountsDB, error) {
 	dbType, found := os.LookupEnv("DB_TYPE")
 	if dbType == "POSTGRES" || !found {
 		db, err := cmn.InitPostgres(cmn.DefaultConfig)
 		if err != nil {
-			return nil, fmt.Errorf("failed to initialize database: %w", err)
+			return nil, fmt.Errorf("failed to initialise database: %w", err)
 		}
-		return &dbPostgres{db}, nil
+		return &dbPostgres{db, redisClient}, nil
 	}
 
 	panic("cassandra not set up yet")
