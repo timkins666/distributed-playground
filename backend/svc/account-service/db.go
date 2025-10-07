@@ -18,7 +18,7 @@ type accountsDB interface {
 func initDB(redisClient *redis.Client) (accountsDB, error) {
 	dbType, found := os.LookupEnv("DB_TYPE")
 	if dbType == "POSTGRES" || !found {
-		db, err := cmn.InitPostgres(cmn.DefaultConfig)
+		db, err := cmn.InitPostgres(cmn.DefaultConfig) // TODO: pass config
 		if err != nil {
 			return nil, fmt.Errorf("failed to initialise database: %w", err)
 		}
