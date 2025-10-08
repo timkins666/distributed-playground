@@ -13,6 +13,11 @@ type transactionDB interface {
 
 func initDB() (transactionDB, error) {
 	dbType, found := os.LookupEnv("DB_TYPE")
+
+	if dbType == "_TEST_" {
+		return &dbPostgres{}, nil
+	}
+
 	if dbType == "POSTGRES" || !found {
 		db, err := cmn.InitPostgres(cmn.DefaultConfig) // TODO: pass config
 		if err != nil {

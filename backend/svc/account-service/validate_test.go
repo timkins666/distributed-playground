@@ -75,7 +75,7 @@ func TestHandleResultsFailedChecks(t *testing.T) {
 
 	writer := tu.MockKafkaWriter{}
 
-	appCtx := AccountsCtx{
+	appCtx := accountsCtx{
 		cancelCtx: context.Background(),
 		writer:    &writer,
 		logger:    cmn.AppLogger(),
@@ -135,7 +135,7 @@ func TestHandleResultsChecksPassed(t *testing.T) {
 
 	writer := tu.MockKafkaWriter{}
 
-	appCtx := AccountsCtx{
+	appCtx := accountsCtx{
 		cancelCtx: context.Background(),
 		writer:    &writer,
 		logger:    cmn.AppLogger(),

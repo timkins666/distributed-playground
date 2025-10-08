@@ -84,7 +84,7 @@ func getTestService() Service {
 	}
 
 	return Service{
-		appCtx: &AccountsCtx{
+		appCtx: &accountsCtx{
 			cancelCtx:    context.Background(),
 			db:           mockDB,
 			logger:       cmn.AppLogger(),
@@ -96,7 +96,7 @@ func getTestService() Service {
 }
 
 // setupTestRequest creates a test HTTP request with the app and userID in the context
-func setupTestRequest(method, url string, body []byte, appCtx AccountsCtx, userID int32) *http.Request {
+func setupTestRequest(method, url string, body []byte, appCtx accountsCtx, userID int32) *http.Request {
 	req := httptest.NewRequest(method, url, bytes.NewBuffer(body))
 	ctx := context.WithValue(req.Context(), cmn.AppCtx, &appCtx)
 	ctx = context.WithValue(ctx, cmn.UserIDKey, userID)

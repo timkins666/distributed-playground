@@ -13,12 +13,12 @@ import (
 )
 
 type Service struct {
-	appCtx *AccountsCtx
+	appCtx *accountsCtx
 	banks  []*cmn.Bank
 }
 
 // sets up the service with all dependencies
-func initializeService(appCtx *AccountsCtx) (*Service, error) {
+func initializeService(appCtx *accountsCtx) (*Service, error) {
 	return &Service{
 		appCtx: appCtx,
 		banks:  []*cmn.Bank{{Name: "BankOfTim", ID: 1}}, // TODO: load from database
@@ -27,7 +27,7 @@ func initializeService(appCtx *AccountsCtx) (*Service, error) {
 
 // getAllBanksHandler returns all available banks
 func (s *Service) getAllBanksHandler(w http.ResponseWriter, r *http.Request) {
-	appCtx, ok := r.Context().Value(cmn.AppCtx).(*AccountsCtx)
+	appCtx, ok := r.Context().Value(cmn.AppCtx).(*accountsCtx)
 	if !ok {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
@@ -63,7 +63,7 @@ func (s *Service) getAllBanksHandler(w http.ResponseWriter, r *http.Request) {
 
 // getUserAccountsHandler returns accounts for the authenticated user
 func (s *Service) getUserAccountsHandler(w http.ResponseWriter, r *http.Request) {
-	appCtx, ok := r.Context().Value(cmn.AppCtx).(*AccountsCtx)
+	appCtx, ok := r.Context().Value(cmn.AppCtx).(*accountsCtx)
 	if !ok {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
@@ -102,7 +102,7 @@ func (s *Service) createUserAccountHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	appCtx, ok := r.Context().Value(cmn.AppCtx).(*AccountsCtx)
+	appCtx, ok := r.Context().Value(cmn.AppCtx).(*accountsCtx)
 	if !ok {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
@@ -142,7 +142,7 @@ func (s *Service) createUserAccountHandler(w http.ResponseWriter, r *http.Reques
 }
 
 // createAccount handles the business logic for account creation
-func (s *Service) createAccount(appCtx *AccountsCtx, userID int32, req *CreateAccountRequest) ([]cmn.Account, error) {
+func (s *Service) createAccount(appCtx *accountsCtx, userID int32, req *CreateAccountRequest) ([]cmn.Account, error) {
 	userAccounts, err := appCtx.db.getUserAccounts(userID)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("failed to get user accounts: %w", err)
@@ -197,7 +197,7 @@ func (s *Service) createAccount(appCtx *AccountsCtx, userID int32, req *CreateAc
 }
 
 // validateSourceAccount validates the source account for fund transfer
-func (s *Service) validateSourceAccount(appCtx *AccountsCtx, sourceAccountID, userID int32, amount int64) (*cmn.Account, error) {
+func (s *Service) validateSourceAccount(appCtx *accountsCtx, sourceAccountID, userID int32, amount int64) (*cmn.Account, error) {
 	if sourceAccountID == 0 {
 		return nil, fmt.Errorf("source account ID is required for additional accounts")
 	}
@@ -219,7 +219,7 @@ func (s *Service) validateSourceAccount(appCtx *AccountsCtx, sourceAccountID, us
 }
 
 // creates the necessary Kafka messages for initial account balance transfer
-func (s *Service) createAccountTransactions(appCtx *AccountsCtx, newAccount *cmn.Account, sourceAcc *cmn.Account, sourceAccountID int32) error {
+func (s *Service) createAccountTransactions(appCtx *accountsCtx, newAccount *cmn.Account, sourceAcc *cmn.Account, sourceAccountID int32) error {
 	paymentID := uuid.NewString()
 
 	// Transaction for the new account (credit)

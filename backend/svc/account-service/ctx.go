@@ -9,7 +9,7 @@ import (
 	cmn "github.com/timkins666/distributed-playground/backend/pkg/common"
 )
 
-type AccountsCtx struct {
+type accountsCtx struct {
 	cancelCtx    context.Context
 	db           accountsDB
 	logger       *log.Logger
@@ -19,7 +19,7 @@ type AccountsCtx struct {
 }
 
 // Close releases all resources
-func (a *AccountsCtx) Close() error {
+func (a *accountsCtx) Close() error {
 	var errs []error
 
 	if a.payReqReader != nil {
@@ -46,7 +46,7 @@ func (a *AccountsCtx) Close() error {
 	return nil
 }
 
-func newAppCtx(cancelCtx context.Context, config *Config) *AccountsCtx {
+func newAppCtx(cancelCtx context.Context, config *Config) *accountsCtx {
 	logger := cmn.AppLogger()
 
 	reader := kafka.NewReader(kafka.ReaderConfig{
@@ -72,7 +72,7 @@ func newAppCtx(cancelCtx context.Context, config *Config) *AccountsCtx {
 		panic(err)
 	}
 
-	return &AccountsCtx{
+	return &accountsCtx{
 		cancelCtx:    cancelCtx,
 		logger:       logger,
 		payReqReader: reader,

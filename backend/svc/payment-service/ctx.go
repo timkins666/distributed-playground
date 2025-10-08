@@ -47,5 +47,6 @@ func newAppCtx(cancelCtx context.Context) paymentCtx {
 		cancelCtx: cancelCtx,
 		db:        db,
 		writer:    writer,
+		logger:    cmn.AppLogger(),
 	}
 }

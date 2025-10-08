@@ -91,7 +91,7 @@ func (pvr *PaymentValidationResult) GetFailureReasons() []string {
 }
 
 // handles validation of requested payments
-func paymentValidator(appCtx *AccountsCtx) {
+func paymentValidator(appCtx *accountsCtx) {
 	max_errors := 10
 	for {
 		select {
@@ -115,7 +115,7 @@ func paymentValidator(appCtx *AccountsCtx) {
 }
 
 // handlePaymentRequestedMessage processes a payment request message
-func handlePaymentRequestedMessage(message kafka.Message, appCtx *AccountsCtx) {
+func handlePaymentRequestedMessage(message kafka.Message, appCtx *accountsCtx) {
 	req, err := cmn.FromBytes[cmn.PaymentRequest](message.Value)
 	if err != nil {
 		appCtx.logger.Printf("Failed to parse payment request message: %v", err)
@@ -176,7 +176,7 @@ func handlePaymentRequestedMessage(message kafka.Message, appCtx *AccountsCtx) {
 }
 
 // processes the validation results
-func handleValidationResults(result *PaymentValidationResult, appCtx *AccountsCtx) {
+func handleValidationResults(result *PaymentValidationResult, appCtx *accountsCtx) {
 	if !result.IsValid() {
 		reasons := result.GetFailureReasons()
 		reason := strings.Join(reasons, ", ")
@@ -190,7 +190,7 @@ func handleValidationResults(result *PaymentValidationResult, appCtx *AccountsCt
 }
 
 // publishes a payment failure message to Kafka
-func sendPaymentFailed(req *cmn.PaymentRequest, reason string, appCtx *AccountsCtx) {
+func sendPaymentFailed(req *cmn.PaymentRequest, reason string, appCtx *accountsCtx) {
 	appCtx.logger.Printf("Payment failed - Amount: %d, From: %d, To: %d, Reason: %s",
 		req.Amount, req.SourceAccountID, req.TargetAccountID, reason)
 
@@ -218,7 +218,7 @@ func sendPaymentFailed(req *cmn.PaymentRequest, reason string, appCtx *AccountsC
 }
 
 // send message(s) for transaction service
-func initiateTransaction(req *cmn.PaymentRequest, appCtx *AccountsCtx) {
+func initiateTransaction(req *cmn.PaymentRequest, appCtx *accountsCtx) {
 	appCtx.logger.Printf("Initiate transaction of £%d from account %d to account %d", req.Amount, req.SourceAccountID, req.TargetAccountID)
 
 	txOut := cmn.Transaction{
@@ -262,7 +262,7 @@ func initiateTransaction(req *cmn.PaymentRequest, appCtx *AccountsCtx) {
 }
 
 // verifies that the source account has sufficient funds
-func checkBalance(req *cmn.PaymentRequest, chn chan<- CheckResult, appCtx *AccountsCtx) {
+func checkBalance(req *cmn.PaymentRequest, chn chan<- CheckResult, appCtx *accountsCtx) {
 	// artificial delay for simulation
 	sleep := rand.N(5000)
 	appCtx.logger.Printf("%s sleeping for %dms", BalanceCheck, sleep)
@@ -295,7 +295,7 @@ func checkBalance(req *cmn.PaymentRequest, chn chan<- CheckResult, appCtx *Accou
 }
 
 // verifies that the target account exists
-func checkTargetAccount(req *cmn.PaymentRequest, chn chan<- CheckResult, appCtx *AccountsCtx) {
+func checkTargetAccount(req *cmn.PaymentRequest, chn chan<- CheckResult, appCtx *accountsCtx) {
 	// artificial delay for simulation
 	sleep := rand.N(5000)
 	appCtx.logger.Printf("%s sleeping for %dms", TargetAccountCheck, sleep)

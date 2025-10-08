@@ -69,7 +69,7 @@ func createTestService(t *testing.T) *Service {
 		Roles:    []string{"foo"},
 	}
 
-	appCtx := AccountsCtx{
+	appCtx := accountsCtx{
 		cancelCtx:    context.Background(),
 		db:           mockDB,
 		payReqReader: &tu.MockKafkaReader{},
@@ -87,7 +87,7 @@ func createTestService(t *testing.T) *Service {
 }
 
 // Test helper to create HTTP request with context
-func createRequestWithContext(method, url string, body []byte, userID int32, appCtx *AccountsCtx) *http.Request {
+func createRequestWithContext(method, url string, body []byte, userID int32, appCtx *accountsCtx) *http.Request {
 	req := httptest.NewRequest(method, url, bytes.NewReader(body))
 
 	// Add user context

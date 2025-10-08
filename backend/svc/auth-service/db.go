@@ -9,6 +9,11 @@ import (
 
 func initDB() (authDB, error) {
 	dbType, found := os.LookupEnv("DB_TYPE")
+
+	if dbType == "_TEST_" {
+		return &dbPostgres{}, nil
+	}
+
 	if dbType == "POSTGRES" || !found {
 		db, err := cmn.InitPostgres(cmn.DefaultConfig)
 		if err != nil {
