@@ -31,11 +31,11 @@ var DefaultConfig DBConfig = DBConfig{
 	Password:       "postgres",
 	DBName:         "banking",
 	Host:           os.Getenv("POSTGRES_HOST"),
-	ConnectTimeout: 10,
+	ConnectTimeout: 2,
 }
 
+// Initialise Postgres connection
 func InitPostgres(conf DBConfig) (*sql.DB, error) {
-	// Initialise Postgres connection
 
 	connStr := conf.ConnectionString()
 	var (

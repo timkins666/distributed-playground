@@ -36,7 +36,6 @@ func newAppCtx(cancelCtx context.Context) paymentCtx {
 		Addr:         kafka.TCP(cmn.KafkaBroker()),
 		RequiredAcks: 1,
 	}
-	defer writer.Close()
 
 	db, err := initDB()
 	if err != nil {

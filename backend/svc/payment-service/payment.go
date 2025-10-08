@@ -14,15 +14,11 @@ import (
 )
 
 func main() {
-	writer := &kafka.Writer{
-		Addr: kafka.TCP(cmn.KafkaBroker()),
-	}
-	defer writer.Close()
-
 	cancelCtx, stop := cmn.GetCancelContext()
 	defer stop()
 
 	appCtx := newAppCtx(cancelCtx)
+	defer appCtx.Close()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/transfer", handlePaymentRequest)
